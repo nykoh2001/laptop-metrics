@@ -68,11 +68,11 @@ docker compose exec spark /opt/spark/bin/spark-submit \
 
 Docker 컨테이너는 Docker Desktop Linux VM의 메트릭과 프로세스만 관찰합니다. privileged container, host network, host path mount도 macOS의 실제 프로세스 트리를 Linux VM에 노출하지 않으므로 collector를 컨테이너화하지 않습니다.
 
-향후 collector가 `python -m collector`로 실행 가능해지면, 먼저 저장소의 명시적인 가상환경을 만듭니다. `launchd`는 shell profile, pyenv 또는 Poetry activation을 읽지 않습니다.
+collector는 `python -m collector`로 실행됩니다. 먼저 저장소의 명시적인 가상환경을 만듭니다. `launchd`는 shell profile, pyenv 또는 Poetry activation을 읽지 않습니다.
 
 ```bash
 python3.11 -m venv .venv
-.venv/bin/python -m pip install -r collector/requirements.txt  # 파일이 추가된 이후
+.venv/bin/python -m pip install -r requirements.txt
 cp .env.example .env
 ./scripts/install_collector_service.sh
 ```
@@ -85,7 +85,69 @@ launchctl kickstart -k "gui/$(id -u)/com.local.system-metric-collector"
 ./scripts/uninstall_collector_service.sh
 ```
 
-wrapper는 `.env`를 읽고 명시적인 Python으로 collector를 실행합니다. `launchd`가 보내는 `SIGTERM`은 `exec`를 통해 Python 프로세스에 직접 전달되므로 collector가 추후 graceful shutdown을 구현할 수 있습니다. 현재 collector 애플리케이션은 범위 밖이므로 설치 스크립트는 `collector/__main__.py`가 없으면 설명과 함께 중단합니다.
+wrapper는 `.env`를 읽고 명시적인 Python으로 collector를 실행합니다. `launchd`가 보내는 `SIGTERM`은 `exec`를 통해 Python 프로세스에 직접 전달되며, 진행 중인 수집 cycle을 마친 뒤 Kafka producer를 flush하고 닫습니다.
+
+## System Metric Collector
+
+Collector는 실제 macOS host에서 host metric 한 건과 실행 중인 process별 metric 한 건을 매 cycle 수집하여 각각 `host_metrics`, `process_metrics` topic에 JSON으로 발행합니다.
+
+| 환경 변수 | 기본값 | 설명 |
+|---|---|---|
+| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | 쉼표로 구분한 Kafka 주소 |
+| `HOST_METRICS_TOPIC` | `host_metrics` | host metric topic |
+| `PROCESS_METRICS_TOPIC` | `process_metrics` | process metric topic |
+| `COLLECTION_INTERVAL_SECONDS` | `5` | 양수 polling 주기 |
+| `KAFKA_CLIENT_ID` | `system-metric-collector` | Kafka client ID |
+| `LOG_LEVEL` | `INFO` | Python logging level |
+
+직접 실행할 때는 현재 작업 디렉터리의 `.env`를 자동으로 읽습니다. 이미 설정된 환경 변수는 `.env`보다 우선합니다.
+
+```bash
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+cp .env.example .env
+.venv/bin/python -m collector
+```
+
+개발 검증 도구까지 설치하려면 다음을 사용합니다.
+
+```bash
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/ruff format --check .
+.venv/bin/ruff check .
+.venv/bin/mypy
+.venv/bin/pytest
+```
+
+Kafka topic 자동 생성이 활성화된 현재 로컬 broker에서는 첫 발행 시 topic이 생성됩니다. 명시적으로 먼저 만들려면 다음 명령을 실행합니다.
+
+```bash
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server kafka:19092 --create --if-not-exists \
+  --topic host_metrics --partitions 1 --replication-factor 1
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server kafka:19092 --create --if-not-exists \
+  --topic process_metrics --partitions 1 --replication-factor 1
+```
+
+발행된 JSON 확인:
+
+```bash
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server kafka:19092 --topic host_metrics \
+  --from-beginning --max-messages 1
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server kafka:19092 --topic process_metrics \
+  --from-beginning --max-messages 1
+```
+
+연속 실행과 graceful shutdown은 짧은 interval로 실행한 뒤 `Ctrl+C`를 눌러 확인할 수 있습니다. 종료 로그에 `Flushing pending Kafka messages`와 `stopped gracefully`가 순서대로 출력됩니다.
+
+```bash
+COLLECTION_INTERVAL_SECONDS=1 LOG_LEVEL=DEBUG .venv/bin/python -m collector
+docker compose exec kafka /opt/kafka/bin/kafka-get-offsets.sh \
+  --bootstrap-server kafka:19092 --topic host_metrics,process_metrics
+```
 
 ## 검증 명령
 

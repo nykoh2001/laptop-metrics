@@ -1,1 +1,142 @@
 # laptop-metrics
+
+macOS 호스트의 시스템 메트릭을 Kafka → Spark Structured Streaming → ClickHouse → Grafana로 처리하기 위한 로컬 학습용 인프라입니다. 컨테이너는 Docker Desktop에서 실행하지만, collector는 실제 macOS 호스트와 프로세스를 관찰하도록 호스트의 `launchd`에서 실행합니다.
+
+## 구성
+
+| 서비스 | 이미지 | 호스트 주소 | 용도 |
+|---|---|---|---|
+| Kafka | `apache/kafka:4.0.2` | `localhost:9092` | KRaft 단일 브로커 |
+| Spark | `apache/spark:3.5.8-scala2.12-java17-python3-ubuntu` | - | `local[*]` 실행 환경 |
+| ClickHouse | `clickhouse/clickhouse-server:25.3` | `localhost:8123`, `localhost:9000` | 시계열 저장소 |
+| Grafana | `grafana/grafana:11.6.0` | <http://localhost:3000> | 시각화 |
+| Kafka UI | `provectuslabs/kafka-ui:v0.7.2` | <http://localhost:8080> | Kafka 관찰 |
+
+선택한 Kafka, Spark, ClickHouse, Grafana, Kafka UI 이미지 manifest는 모두 `linux/arm64`를 제공하므로 Apple Silicon에서 에뮬레이션 없이 실행됩니다.
+
+## 빠른 시작
+
+Docker Desktop을 시작하고 다음을 실행합니다.
+
+```bash
+cp .env.example .env
+docker compose config --quiet
+docker compose up -d
+docker compose ps
+```
+
+기본 비밀번호는 로컬 개발용 예시입니다. `.env`를 Git에 커밋하지 말고 필요에 맞게 변경하십시오. 종료 및 재시작은 다음과 같습니다.
+
+```bash
+docker compose stop
+docker compose start
+docker compose down
+```
+
+`down`은 named volume을 보존합니다. 모든 Kafka/ClickHouse/Grafana 데이터를 제거하는 완전 초기화는 명시적으로 다음을 실행합니다.
+
+```bash
+docker compose down --volumes
+```
+
+## Kafka listener 설계
+
+Kafka는 client에게 최초 접속 주소가 아니라 `advertised.listeners`의 주소를 돌려줍니다. 따라서 client 위치별로 다른 주소를 광고해야 합니다.
+
+| client 위치 | bootstrap server | advertised address |
+|---|---|---|
+| Compose network 내부 | `kafka:19092` | `INTERNAL://kafka:19092` |
+| macOS collector/도구 | `localhost:9092` | `EXTERNAL://localhost:9092` |
+| KRaft controller | client 사용 금지 | `CONTROLLER://kafka:29093` |
+
+컨테이너 안의 `localhost`는 해당 컨테이너 자신이므로 Spark와 Kafka UI는 반드시 `kafka:19092`를 사용합니다. 반대로 macOS의 collector는 Docker DNS 이름 `kafka`를 해석할 수 없으므로 `localhost:9092`를 사용합니다.
+
+## Spark 사용 방식
+
+초기 단계에는 master/worker cluster를 만들지 않습니다. `spark` 컨테이너는 제출 환경으로 대기하며 향후 job은 `local[*]`로 실행합니다. Kafka connector는 Spark와 같은 3.5.8 버전을 사용합니다.
+
+```bash
+docker compose exec spark /opt/spark/bin/spark-submit \
+  --master 'local[*]' \
+  --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.8 \
+  /opt/laptop-metrics/spark/jobs/example.py
+```
+
+최초 package 해석에는 인터넷 연결이 필요합니다. 실제 job은 아직 이 저장소에 포함하지 않습니다.
+
+## collector의 launchd 설치
+
+Docker 컨테이너는 Docker Desktop Linux VM의 메트릭과 프로세스만 관찰합니다. privileged container, host network, host path mount도 macOS의 실제 프로세스 트리를 Linux VM에 노출하지 않으므로 collector를 컨테이너화하지 않습니다.
+
+향후 collector가 `python -m collector`로 실행 가능해지면, 먼저 저장소의 명시적인 가상환경을 만듭니다. `launchd`는 shell profile, pyenv 또는 Poetry activation을 읽지 않습니다.
+
+```bash
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -r collector/requirements.txt  # 파일이 추가된 이후
+cp .env.example .env
+./scripts/install_collector_service.sh
+```
+
+설치 스크립트는 실제 저장소 절대 경로와 `.venv/bin/python` 경로를 plist에 기록하고 `~/Library/LaunchAgents/com.local.system-metric-collector.plist`를 등록합니다. 로그인 시 자동 시작하며 비정상 종료 시 재시작합니다. 로그는 `~/Library/Logs/laptop-metrics/collector.stdout.log`와 `collector.stderr.log`에 기록됩니다.
+
+```bash
+launchctl print "gui/$(id -u)/com.local.system-metric-collector"
+launchctl kickstart -k "gui/$(id -u)/com.local.system-metric-collector"
+./scripts/uninstall_collector_service.sh
+```
+
+wrapper는 `.env`를 읽고 명시적인 Python으로 collector를 실행합니다. `launchd`가 보내는 `SIGTERM`은 `exec`를 통해 Python 프로세스에 직접 전달되므로 collector가 추후 graceful shutdown을 구현할 수 있습니다. 현재 collector 애플리케이션은 범위 밖이므로 설치 스크립트는 `collector/__main__.py`가 없으면 설명과 함께 중단합니다.
+
+## 검증 명령
+
+```bash
+docker compose config --quiet
+docker compose up -d --wait
+
+# Kafka topic 생성 및 내부 listener 확인
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server kafka:19092 --create --if-not-exists \
+  --topic infrastructure-check --partitions 1 --replication-factor 1
+docker compose exec kafka /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server kafka:19092 --describe --topic infrastructure-check
+
+# macOS host의 external listener에서 produce/consume (kcat이 설치된 경우)
+printf 'host-listener-check\n' | kcat -P -b localhost:9092 \
+  -t infrastructure-check
+kcat -C -b localhost:9092 -t infrastructure-check -o beginning -c 1
+
+# ClickHouse와 Grafana
+curl --fail --user "$CLICKHOUSE_USER:$CLICKHOUSE_PASSWORD" \
+  'http://localhost:8123/?query=SELECT%201'
+curl --fail http://localhost:3000/api/health
+curl --fail http://localhost:8080/actuator/health
+```
+
+이 구현 검증에서는 별도 client를 설치하지 않고 `docker cp`로 Kafka 배포본을 `/tmp`에 복사한 뒤, macOS에 설치된 Java 17로 다음 host-native 명령을 실행했습니다.
+
+```bash
+docker cp laptop-metrics-kafka-1:/opt/kafka /tmp/laptop-metrics-kafka-client/kafka
+printf 'host-listener-check\n' | \
+  /tmp/laptop-metrics-kafka-client/kafka/bin/kafka-console-producer.sh \
+  --bootstrap-server localhost:9092 --topic infrastructure-check
+/tmp/laptop-metrics-kafka-client/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server localhost:9092 --topic infrastructure-check \
+  --from-beginning --max-messages 1 --timeout-ms 15000
+```
+
+volume 보존은 임시 topic/table 또는 Grafana 설정을 만든 뒤 `docker compose down && docker compose up -d` 후 남아 있는지 확인합니다. `down --volumes`는 이 검증에서 사용하지 않습니다.
+
+plist 문법은 template과 설치 결과 각각 확인할 수 있습니다.
+
+```bash
+plutil -lint launchd/com.local.system-metric-collector.plist.example
+plutil -lint "$HOME/Library/LaunchAgents/com.local.system-metric-collector.plist"
+```
+
+## 문제 해결과 자원
+
+- `Cannot connect to the Docker daemon`: Docker Desktop을 먼저 시작합니다.
+- Kafka host client가 연결 후 끊김: client가 `localhost:9092`, 컨테이너가 `kafka:19092`를 사용하는지 확인합니다.
+- port 충돌: `.env`의 host port를 변경합니다. Kafka external advertised port도 `KAFKA_EXTERNAL_PORT`와 동일해야 합니다.
+- 초기 기동은 이미지 pull과 Spark package download 때문에 느릴 수 있습니다.
+- Docker Desktop 메모리는 최소 6GB, 여유가 있으면 8GB를 권장합니다. Spark driver memory 기본값은 1GB로 제한했습니다.

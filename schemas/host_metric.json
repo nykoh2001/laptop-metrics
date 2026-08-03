@@ -1,0 +1,16 @@
+{
+	"timestamp": "2026-07-29T14:14:53.401743Z",
+	"hostname": "nannui-mac.local",
+	"cpu_usage_percent": 0.0,
+	"memory_usage_percent": 85.6,
+	"total_memory_bytes": 8589934592,
+	"available_memory_bytes": 1236140032,
+	"swap_usage_percent": 89.7,
+	"total_swap_bytes": 8589934592,
+	"used_swap_bytes": 7703035904,
+	"disk_usage_percent": 38.1,
+	"disk_read_bytes": 15260424570880,
+	"disk_write_bytes": 6653041659904,
+	"network_bytes_sent": 3563889664,
+	"network_bytes_received": 5244736512
+}

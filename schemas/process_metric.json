@@ -1,0 +1,9 @@
+{
+	"timestamp": "2026-07-29T14:16:36.956222Z",
+	"pid": 98709,
+	"process_name": "screencaptureui",
+	"cpu_usage_percent": 0.0,
+	"memory_usage_percent": 0.04711151123046875,
+	"rss_memory_bytes": 4046848,
+	"process_status": "running"
+}

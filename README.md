@@ -58,11 +58,28 @@ Kafka는 client에게 최초 접속 주소가 아니라 `advertised.listeners`�
 ```bash
 docker compose exec spark /opt/spark/bin/spark-submit \
   --master 'local[*]' \
+  --conf spark.jars.ivy=/tmp/.ivy2 \
   --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.8 \
-  /opt/laptop-metrics/spark/jobs/example.py
+  /opt/laptop-metrics/spark/jobs/host_metrics_console.py
 ```
 
-최초 package 해석에는 인터넷 연결이 필요합니다. 실제 job은 아직 이 저장소에 포함하지 않습니다.
+Spark 이미지의 실행 사용자 home은 쓸 수 없는 경로이므로 Ivy package cache를 `/tmp/.ivy2`로
+지정합니다. 최초 package 해석에는 인터넷 연결이 필요합니다.
+
+`host_metrics_console.py`는 `host_metrics` topic의 JSON을 명시적인 Spark schema로 파싱하고,
+`timestamp`를 UTC `TimestampType`으로 변환한 뒤 console에 출력하는 최소 Structured Streaming
+job입니다. 기본적으로 job 시작 이후 도착한 메시지부터 읽습니다. 실행 후 collector가 metric을
+발행하면 Spark 로그에서 구조화된 행을 확인할 수 있습니다. 종료할 때는 `Ctrl+C`를 누릅니다.
+
+| 환경 변수 | 기본값 | 설명 |
+|---|---|---|
+| `KAFKA_BOOTSTRAP_SERVERS` | `kafka:19092` | Spark 컨테이너에서 접근할 Kafka broker |
+| `HOST_METRICS_TOPIC` | `host_metrics` | 구독할 Kafka topic |
+| `HOST_METRICS_CHECKPOINT_LOCATION` | `/opt/laptop-metrics/spark/checkpoints/host_metrics_console` | offset과 query 진행 상태 저장 위치 |
+| `SPARK_LOG_LEVEL` | `WARN` | Spark 내부 로그 수준 |
+
+Checkpoint가 존재하면 Spark는 저장된 offset부터 이어서 읽으며 `startingOffsets=latest` 설정은
+새 query를 처음 시작할 때만 적용됩니다.
 
 ## collector의 launchd 설치
 

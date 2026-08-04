@@ -6,6 +6,7 @@ import os
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.streaming import StreamingQuery
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType, DoubleType, LongType
+from pyspark.sql.functions import col, from_json, to_timestamp
 
 LOGGER = logging.getLogger(__file__)
 
@@ -42,15 +43,45 @@ def read_process_metrics(
     Returns:
         Streaming DataFrame with typed process metric columns.
     """
-    # EXERCISE 2:
-    # Use spark.readStream with the Kafka source. Configure the broker,
-    # subscribed topic, and initial offset position, then call load().
-    raise NotImplementedError("Complete EXERCISE 2: read process records from Kafka")
+    # 1. Configure the broker, subscribe the topic, initialize the offset,
+    #    and read the data as a stream -> Get Spark Streaming DataFrame
+    #    e.g.)
+    #   ┌────────┬──────────────────────────────────────┬───────────────┬────────┐
+    #   │ key    │ value                                │ topic         │ offset │
+    #   ├────────┼──────────────────────────────────────┼───────────────┼────────┤
+    #   │ null   │ b'{"pid":123,"process_name":"..."}'  │process_metrics│ 42     │
+    #   └────────┴──────────────────────────────────────┴───────────────┴────────┘
+    kafka_records = (
+        spark.readStream.format("kafka")
+        # Configure broker
+        .option("kafka.bootstrap.servers", bootstrap_servers)
+        .option("subscribe", topic)  # Subscribe given topic
+        .option("startingOffsets", "latest")  # Initial offset position
+        .load()
+    )
 
-    # EXERCISE 3 (place below the Kafka source after removing the raise above):
-    # Kafka's value column is binary. Convert it to a string, parse it with
-    # process_metric_schema(), expand the parsed struct, and convert timestamp
-    # from the contract format to Spark TimestampType before returning it.
+    # 2. Convert the JSON bytes in Kafka value to Structure column type
+    #    JSON bytes -> string -> JSON parse 
+    # -> Structure column named 'metric'
+    # -> Colum type conversion
+    #
+    # e.g.)
+    # +--------------------------------------------------+
+    # | metric                                           |
+    # +--------------------------------------------------+
+    # | {2026-07-29T14:16:36.956222Z, 98709, ..., 0.0}   |
+    # +--------------------------------------------------+
+    parsed_records = kafka_records.select(
+        from_json(
+            col("value").cast("string"),
+            process_metric_schema()
+        ).alias("metric")
+    )
+
+    return parsed_records.select("metric.*").withColumn(
+        "timestamp",
+        to_timestamp(col("timestamp"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX"),
+    )
 
 
 def write_to_console(metrics: DataFrame, checkpoint_location: str) -> StreamingQuery:
@@ -66,12 +97,14 @@ def write_to_console(metrics: DataFrame, checkpoint_location: str) -> StreamingQ
     # EXERCISE 4:
     # Start an append-mode console streaming query. Show complete values without
     # truncation and store progress at checkpoint_location.
-    raise NotImplementedError("Complete EXERCISE 4: write process metrics to the console")
+    raise NotImplementedError(
+        "Complete EXERCISE 4: write process metrics to the console")
 
 
 def main() -> None:
     """Configure and run the Kafka-to-console process metric streaming job."""
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s %(levelname)s %(message)s")
     bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:19092")
     topic = os.getenv("PROCESS_METRICS_TOPIC", "process_metrics")
     checkpoint_location = os.getenv(

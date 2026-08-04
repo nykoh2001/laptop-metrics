@@ -78,6 +78,12 @@ def read_process_metrics(
         ).alias("metric")
     )
 
+    # e.g.)
+    # +---------------------------+-----+-----------------+-------------------+
+    # | timestamp                 | pid | process_name    |cpu_usage_percent  |
+    # +---------------------------+-----+-----------------+-------------------+
+    # |2026-07-29T14:16:36.956222Z|98709|screencaptureui |0.0                |
+    # +---------------------------+-----+-----------------+-------------------+
     return parsed_records.select("metric.*").withColumn(
         "timestamp",
         to_timestamp(col("timestamp"), "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX"),
@@ -94,11 +100,15 @@ def write_to_console(metrics: DataFrame, checkpoint_location: str) -> StreamingQ
     Returns:
         Running streaming query.
     """
-    # EXERCISE 4:
-    # Start an append-mode console streaming query. Show complete values without
-    # truncation and store progress at checkpoint_location.
-    raise NotImplementedError(
-        "Complete EXERCISE 4: write process metrics to the console")
+    # Lazy Evaluation
+    # Micro-batch execution until the streaming query ends
+    return (
+        metrics.writeStream.format("console")
+        .outputMode("append")
+        .option("truncate", "false")
+        .option("checkpointLocation", checkpoint_location) # Store progress, (e.g. last completed offset)
+        .start()
+    )
 
 
 def main() -> None:

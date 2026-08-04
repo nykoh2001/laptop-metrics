@@ -16,6 +16,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "mypy==1.17.1",
+  # Spark 컨테이너에 포함된 런타임과 버전을 맞춰 로컬 Spark 테스트에 사용합니다.
+  "pyspark==3.5.8",
   "pytest==8.4.1",
   "ruff==0.12.7",
   "types-psutil==7.0.0.20250601",

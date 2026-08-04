@@ -14,7 +14,7 @@ from collector.kafka_producer import KafkaMetricProducer
 from collector.models import HostMetric, ProcessMetric
 from collector.utils import load_env_file, utc_timestamp
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__file__)
 
 
 class MetricPublisher(Protocol):

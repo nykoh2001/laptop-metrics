@@ -9,7 +9,7 @@ import psutil
 from collector.models import HostMetric, ProcessMetric
 from collector.utils import utc_timestamp
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__file__)
 
 
 class SystemMetricCollector:

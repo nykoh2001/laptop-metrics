@@ -8,7 +8,7 @@ from kafka import KafkaProducer
 from collector.models import HostMetric, ProcessMetric
 from collector.serializers import serialize_metric
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__file__)
 
 
 class KafkaMetricProducer:

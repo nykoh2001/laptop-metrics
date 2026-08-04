@@ -5,7 +5,7 @@ import os
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.streaming import StreamingQuery
-from pyspark.sql.types import StructType
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType, DoubleType, LongType
 
 LOGGER = logging.getLogger(__file__)
 
@@ -16,11 +16,15 @@ def process_metric_schema() -> StructType:
     Returns:
         Spark schema matching ``schemas/process_metric.json``.
     """
-    # EXERCISE 1:
-    # Define every ProcessMetric field with StructType and StructField.
-    # Decide which Spark type corresponds to str, int, and float before
-    # consulting host_metrics_console.py.
-    raise NotImplementedError("Complete EXERCISE 1: define the process metric schema")
+    return StructType(
+        StructField("timestamp", StringType, nullable=False),
+        StructField("pid", IntegerType, nullable=False),
+        StructField("process_name", StringType, nullable=False),
+        StructField("cpu_usage_percent", DoubleType, nullable=False),
+        StructField("memory_usage_percent", DoubleType, nullable=False),
+        StructField("rss_memory_bytes", LongType, nullable=False),
+        StructField("process_status", StringType, nullable=False),
+    )
 
 
 def read_process_metrics(

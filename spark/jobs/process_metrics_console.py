@@ -17,13 +17,13 @@ def process_metric_schema() -> StructType:
         Spark schema matching ``schemas/process_metric.json``.
     """
     return StructType(
-        StructField("timestamp", StringType, nullable=False),
-        StructField("pid", IntegerType, nullable=False),
-        StructField("process_name", StringType, nullable=False),
-        StructField("cpu_usage_percent", DoubleType, nullable=False),
-        StructField("memory_usage_percent", DoubleType, nullable=False),
-        StructField("rss_memory_bytes", LongType, nullable=False),
-        StructField("process_status", StringType, nullable=False),
+        StructField("timestamp", StringType(), nullable=False),
+        StructField("pid", IntegerType(), nullable=False),
+        StructField("process_name", StringType(), nullable=False),
+        StructField("cpu_usage_percent", DoubleType(), nullable=False),
+        StructField("memory_usage_percent", DoubleType(), nullable=False),
+        StructField("rss_memory_bytes", LongType(), nullable=False),
+        StructField("process_status", StringType(), nullable=False),
     )
 
 

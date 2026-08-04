@@ -8,7 +8,7 @@ from pyspark.sql.functions import col, from_json, to_timestamp
 from pyspark.sql.streaming import StreamingQuery
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__file__)
 
 
 def host_metric_schema() -> StructType:

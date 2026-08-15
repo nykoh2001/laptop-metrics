@@ -211,6 +211,9 @@ curl --fail http://localhost:3000/api/health
 curl --fail http://localhost:8080/actuator/health
 ```
 
+ClickHouse metric table definitions and live schema inspection commands are documented in
+[`clickhouse/README.md`](clickhouse/README.md).
+
 이 구현 검증에서는 별도 client를 설치하지 않고 `docker cp`로 Kafka 배포본을 `/tmp`에 복사한 뒤, macOS에 설치된 Java 17로 다음 host-native 명령을 실행했습니다.
 
 ```bash

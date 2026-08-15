@@ -62,6 +62,18 @@ def read_process_metrics(
         .load()
     )
 
+    return parse_process_metric_records(kafka_records)
+
+
+def parse_process_metric_records(kafka_records: DataFrame) -> DataFrame:
+    """Parse Kafka record values into typed process metric columns.
+
+    Args:
+        kafka_records: DataFrame containing a binary or string ``value`` column.
+
+    Returns:
+        DataFrame containing typed process metric columns and a UTC timestamp.
+    """
     # 2. Convert the JSON bytes in Kafka value to Structure column type
     #    JSON bytes -> string -> JSON parse
     # -> Structure column named 'metric'

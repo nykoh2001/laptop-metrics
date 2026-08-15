@@ -60,6 +60,18 @@ def read_host_metrics(
         .load()
     )
 
+    return parse_host_metric_records(kafka_records)
+
+
+def parse_host_metric_records(kafka_records: DataFrame) -> DataFrame:
+    """Parse Kafka record values into typed host metric columns.
+
+    Args:
+        kafka_records: DataFrame containing a binary or string ``value`` column.
+
+    Returns:
+        DataFrame containing typed host metric columns and a UTC timestamp.
+    """
     parsed_records = kafka_records.select(
         from_json(col("value").cast("string"), host_metric_schema()).alias("metric")
     )

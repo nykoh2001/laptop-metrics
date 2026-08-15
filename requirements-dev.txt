@@ -1,3 +1,4 @@
+-r requirements-build.txt
 -r requirements-test.txt
 -r requirements-quality.txt
 mypy==1.17.1

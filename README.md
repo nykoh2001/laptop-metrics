@@ -190,8 +190,18 @@ docker compose exec kafka /opt/kafka/bin/kafka-get-offsets.sh \
 
 GitHub Actions는 `main` 브랜치를 대상으로 하는 pull request와 `main` 브랜치 push에서
 실행됩니다. 현재 단계에서는 Python 3.11 환경에 애플리케이션을 설치하고 `collector`, Spark job,
-test 코드의 Python 문법과 전체 pytest suite를 검증합니다. 테스트 전용 의존성은
+test 코드의 Python 문법과 전체 pytest suite를 검증합니다. PySpark 테스트는 Java 17의 로컬
+Spark session에서 collector JSON의 typed column 변환을 확인합니다. Kafka 통합 테스트는 Kafka
+4.0.2 컨테이너를 시작하고 실제 producer/consumer round-trip을 확인합니다. 테스트 전용 의존성은
 `requirements-test.txt`로 관리하며 Ruff, lint, type check는 아직 CI에 포함하지 않습니다.
+
+Kafka 통합 테스트는 외부 broker가 필요한 테스트임을 명시하기 위해 기본 로컬 실행에서는
+skip됩니다. 로컬 Compose Kafka를 포함한 전체 CI suite는 다음과 같이 재현할 수 있습니다.
+
+```bash
+docker compose up -d --wait kafka
+RUN_KAFKA_INTEGRATION_TESTS=1 .venv/bin/pytest --durations=10
+```
 
 검증 실패 시 실제 병합을 차단하려면 GitHub repository ruleset 또는 branch protection에서
 `main` 브랜치의 `Validate code changes` status check를 필수로 지정해야 합니다.

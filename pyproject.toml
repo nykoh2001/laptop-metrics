@@ -32,6 +32,10 @@ include = ["collector*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = ["--strict-markers"]
+markers = [
+  "integration: requires an external infrastructure service",
+]
 
 [tool.ruff]
 line-length = 100

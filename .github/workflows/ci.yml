@@ -11,14 +11,25 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     name: Validate code changes
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -36,5 +47,21 @@ jobs:
       - name: Check Python syntax
         run: python -m compileall -q collector spark/jobs tests
 
+      - name: Start Kafka
+        env:
+          CLICKHOUSE_PASSWORD: ci-only
+          GRAFANA_ADMIN_PASSWORD: ci-only
+        run: docker compose up -d --wait kafka
+
       - name: Run tests
         run: python -m pytest --durations=10
+        env:
+          KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+          RUN_KAFKA_INTEGRATION_TESTS: "1"
+
+      - name: Show Kafka logs on failure
+        if: failure()
+        env:
+          CLICKHOUSE_PASSWORD: ci-only
+          GRAFANA_ADMIN_PASSWORD: ci-only
+        run: docker compose logs kafka

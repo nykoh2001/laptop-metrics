@@ -186,6 +186,16 @@ docker compose exec kafka /opt/kafka/bin/kafka-get-offsets.sh \
   --bootstrap-server kafka:19092 --topic host_metrics,process_metrics
 ```
 
+## CI
+
+GitHub Actions는 `main` 브랜치를 대상으로 하는 pull request와 `main` 브랜치 push에서
+실행됩니다. 현재 단계에서는 Python 3.11 환경에 애플리케이션을 설치하고 `collector`, Spark job,
+test 코드의 Python 문법만 검증합니다. pytest, Ruff, lint, type check, Kafka message schema 검증은
+후속 단계에서 추가합니다.
+
+검증 실패 시 실제 병합을 차단하려면 GitHub repository ruleset 또는 branch protection에서
+`main` 브랜치의 `Validate code changes` status check를 필수로 지정해야 합니다.
+
 ## 검증 명령
 
 ```bash

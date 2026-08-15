@@ -189,7 +189,7 @@ docker compose exec kafka /opt/kafka/bin/kafka-get-offsets.sh \
 ## CI
 
 GitHub Actions는 `main` 브랜치를 대상으로 하는 pull request와 `main` 브랜치 push에서
-실행됩니다. `ci-format.yml`은 Python 문법, Ruff format, Ruff lint를 순서대로 검사하고,
+실행됩니다. `ci-quality.yml`은 Python 문법, Ruff format, Ruff lint를 순서대로 검사하고,
 `ci-test.yml`은 전체 pytest suite를 실행합니다. PySpark 테스트는 Java 17의 로컬 Spark session에서
 collector JSON의 typed column 변환을 확인합니다. Kafka 통합 테스트는 Kafka 4.0.2 컨테이너를
 시작하고 실제 producer/consumer round-trip을 확인합니다. 테스트 의존성은

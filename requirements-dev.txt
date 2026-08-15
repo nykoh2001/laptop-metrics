@@ -1,7 +1,4 @@
--r requirements.txt
-# Spark 컨테이너에 포함된 런타임과 버전을 맞춰 로컬 Spark 테스트에 사용합니다.
-pyspark==3.5.8
+-r requirements-test.txt
 mypy==1.17.1
-pytest==8.4.1
 ruff==0.12.7
 types-psutil==7.0.0.20250601

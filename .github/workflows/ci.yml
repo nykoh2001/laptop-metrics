@@ -25,10 +25,16 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            requirements.txt
+            requirements-test.txt
 
-      - name: Install application
-        run: python -m pip install .
+      - name: Install application and test dependencies
+        run: python -m pip install . -r requirements-test.txt
 
       - name: Check Python syntax
         run: python -m compileall -q collector spark/jobs tests
+
+      - name: Run tests
+        run: python -m pytest --durations=10

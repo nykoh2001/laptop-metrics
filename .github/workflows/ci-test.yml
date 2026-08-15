@@ -1,4 +1,4 @@
-name: CI
+name: CI - Test
 
 on:
   pull_request:
@@ -16,8 +16,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
-    name: Validate code changes
+  test:
+    name: Run tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -43,9 +43,6 @@ jobs:
 
       - name: Install application and test dependencies
         run: python -m pip install . -r requirements-test.txt
-
-      - name: Check Python syntax
-        run: python -m compileall -q collector spark/jobs tests
 
       - name: Start Kafka
         env:

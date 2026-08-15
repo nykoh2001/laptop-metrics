@@ -1,4 +1,4 @@
 -r requirements-test.txt
+-r requirements-quality.txt
 mypy==1.17.1
-ruff==0.12.7
 types-psutil==7.0.0.20250601

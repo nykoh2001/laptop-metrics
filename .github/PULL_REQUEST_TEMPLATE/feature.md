@@ -1,5 +1,8 @@
 ### Summary
+<!-- Main bullets of what have done in this PR. -->
 
-### Verification
+### Troubleshoots
+<!-- Main troubleshootings until making these changes -->
 
-### Screenshots
+### Knowledge Gaps
+<!-- Key knowledges that are the core of the changes -->

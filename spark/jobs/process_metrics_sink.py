@@ -1,4 +1,4 @@
-"""Learning scaffold for streaming process metrics from Kafka to the console."""
+"""Stream process metrics from Kafka to ClickHouse."""
 
 import logging
 import os
@@ -7,6 +7,14 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, from_json, to_timestamp
 from pyspark.sql.streaming import StreamingQuery
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
+
+try:
+    from spark.jobs.clickhouse_sink import (
+        clickhouse_http_config_from_env,
+        write_stream_to_clickhouse,
+    )
+except ModuleNotFoundError:
+    from clickhouse_sink import clickhouse_http_config_from_env, write_stream_to_clickhouse
 
 LOGGER = logging.getLogger(__file__)
 
@@ -101,8 +109,8 @@ def parse_process_metric_records(kafka_records: DataFrame) -> DataFrame:
     )
 
 
-def write_to_console(metrics: DataFrame, checkpoint_location: str) -> StreamingQuery:
-    """Start a console sink for a process metric stream.
+def write_to_clickhouse(metrics: DataFrame, checkpoint_location: str) -> StreamingQuery:
+    """Start a ClickHouse sink for a process metric stream.
 
     Args:
         metrics: Structured process metric streaming DataFrame.
@@ -110,31 +118,32 @@ def write_to_console(metrics: DataFrame, checkpoint_location: str) -> StreamingQ
 
     Returns:
         Running streaming query.
+
+    Raises:
+        ValueError: If required ClickHouse settings are invalid.
     """
     # Lazy Evaluation
     # Micro-batch execution until the streaming query ends
-    return (
-        metrics.writeStream.format("console")
-        .outputMode("append")
-        .option("truncate", "false")
-        # Store progress, (e.g. last completed offset)
-        .option("checkpointLocation", checkpoint_location)
-        .start()
+    return write_stream_to_clickhouse(
+        metrics=metrics,
+        checkpoint_location=checkpoint_location,
+        table=os.getenv("PROCESS_METRICS_CLICKHOUSE_TABLE", "fact_process_metrics"),
+        config=clickhouse_http_config_from_env(),
     )
 
 
 def main() -> None:
-    """Configure and run the Kafka-to-console process metric streaming job."""
+    """Configure and run the Kafka-to-ClickHouse process metric streaming job."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:19092")
     topic = os.getenv("PROCESS_METRICS_TOPIC", "process_metrics")
     checkpoint_location = os.getenv(
         "PROCESS_METRICS_CHECKPOINT_LOCATION",
-        "/opt/laptop-metrics/spark/checkpoints/process_metrics_console",
+        "/opt/laptop-metrics/spark/checkpoints/process_metrics_clickhouse",
     )
 
     spark = (
-        SparkSession.builder.appName("process-metrics-console")
+        SparkSession.builder.appName("process-metrics-clickhouse")
         .config("spark.sql.session.timeZone", "UTC")
         .getOrCreate()
     )
@@ -147,7 +156,7 @@ def main() -> None:
     )
     try:
         metrics = read_process_metrics(spark, bootstrap_servers, topic)
-        query = write_to_console(metrics, checkpoint_location)
+        query = write_to_clickhouse(metrics, checkpoint_location)
         query.awaitTermination()
     finally:
         for active_query in spark.streams.active:

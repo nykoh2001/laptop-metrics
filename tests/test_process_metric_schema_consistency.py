@@ -8,7 +8,7 @@ from typing import get_type_hints
 from pyspark.sql.types import DoubleType, LongType, StringType
 
 from collector.models import ProcessMetric
-from spark.jobs.process_metrics_console import process_metric_schema
+from spark.jobs.process_metrics_sink import process_metric_schema
 
 
 def test_process_metric_schema_consistency() -> None:

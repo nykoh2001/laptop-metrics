@@ -38,9 +38,15 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      clickhouse:
+        condition: service_healthy
     environment:
       SPARK_DRIVER_MEMORY: ${SPARK_DRIVER_MEMORY:-1g}
       KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-metrics}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-metrics}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD in .env}
+      CLICKHOUSE_HTTP_URL: http://clickhouse:8123
     command: ["/bin/bash", "-c", "trap 'exit 0' TERM INT; while :; do sleep 86400 & wait $${!}; done"]
     volumes:
       - ./spark:/opt/laptop-metrics/spark

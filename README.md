@@ -19,8 +19,8 @@ macOS
         Spark Structured Streaming
         JSON 파싱 → 타입 변환 → UTC 정규화
                     │
-           현재: console sink
-           목표: ClickHouse → Grafana
+                    ▼
+             ClickHouse → Grafana
 ```
 
 collector는 CPU, memory, swap, disk, network와 프로세스별 CPU, memory, disk I/O를 주기적으로 수집합니다.
@@ -89,7 +89,7 @@ docker compose exec spark /opt/spark/bin/spark-submit \
   --master 'local[*]' \
   --conf spark.jars.ivy=/tmp/.ivy2 \
   --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.8 \
-  /opt/laptop-metrics/spark/jobs/host_metrics_console.py
+  /opt/laptop-metrics/spark/jobs/host_metrics_sink.py
 ```
 
 Process metric:
@@ -99,10 +99,10 @@ docker compose exec spark /opt/spark/bin/spark-submit \
   --master 'local[*]' \
   --conf spark.jars.ivy=/tmp/.ivy2 \
   --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.8 \
-  /opt/laptop-metrics/spark/jobs/process_metrics_console.py
+  /opt/laptop-metrics/spark/jobs/process_metrics_sink.py
 ```
 
-최초 실행 시 Kafka connector를 내려받기 위해 인터넷 연결이 필요합니다. job은 `Ctrl+C`로 종료합니다.
+최초 실행 시 Kafka connector를 내려받기 위해 인터넷 연결이 필요합니다. ClickHouse에는 HTTP `TabSeparated` 형식으로 batch insert합니다. job은 `Ctrl+C`로 종료합니다.
 
 인프라를 중지하거나 제거하려면 다음 명령을 사용합니다. `down`은 named volume을 보존합니다.
 
@@ -124,6 +124,8 @@ docker compose down
 | 메트릭별 명시적 Spark schema와 checkpoint 사용 | JSON 타입을 예측 가능하게 유지하고, 각 query가 자신의 offset과 진행 상태를 독립적으로 복구할 수 있습니다. |
 | 타임스탬프를 UTC로 정규화 | 저장·분석 계층에서 로컬 시간대와 DST에 따른 해석 차이를 줄입니다. |
 | Kafka·ClickHouse·Grafana 데이터에 named volume 사용 | 컨테이너를 다시 만들어도 로컬 학습 데이터를 유지합니다. |
+
+장기 안정성 개선 항목은 [streaming_stability_plan.md](docs/streaming_stability_plan.md)에 기록합니다.
 
 ## CI
 

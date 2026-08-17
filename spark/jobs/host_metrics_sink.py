@@ -1,4 +1,4 @@
-"""Read host metrics from Kafka and write structured rows to the console."""
+"""Read host metrics from Kafka and write structured rows to ClickHouse."""
 
 import logging
 import os
@@ -7,6 +7,14 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, from_json, to_timestamp
 from pyspark.sql.streaming import StreamingQuery
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
+
+try:
+    from spark.jobs.clickhouse_sink import (
+        clickhouse_http_config_from_env,
+        write_stream_to_clickhouse,
+    )
+except ModuleNotFoundError:
+    from clickhouse_sink import clickhouse_http_config_from_env, write_stream_to_clickhouse
 
 LOGGER = logging.getLogger(__file__)
 
@@ -82,8 +90,8 @@ def parse_host_metric_records(kafka_records: DataFrame) -> DataFrame:
     )
 
 
-def write_to_console(metrics: DataFrame, checkpoint_location: str) -> StreamingQuery:
-    """Start a console sink for a host metric stream.
+def write_to_clickhouse(metrics: DataFrame, checkpoint_location: str) -> StreamingQuery:
+    """Start a ClickHouse sink for a host metric stream.
 
     Args:
         metrics: Structured host metric streaming DataFrame.
@@ -91,28 +99,30 @@ def write_to_console(metrics: DataFrame, checkpoint_location: str) -> StreamingQ
 
     Returns:
         Running streaming query.
+
+    Raises:
+        ValueError: If required ClickHouse settings are invalid.
     """
-    return (
-        metrics.writeStream.format("console")
-        .outputMode("append")
-        .option("truncate", "false")
-        .option("checkpointLocation", checkpoint_location)
-        .start()
+    return write_stream_to_clickhouse(
+        metrics=metrics,
+        checkpoint_location=checkpoint_location,
+        table=os.getenv("HOST_METRICS_CLICKHOUSE_TABLE", "fact_host_metrics"),
+        config=clickhouse_http_config_from_env(),
     )
 
 
 def main() -> None:
-    """Run the Kafka-to-console host metric streaming job."""
+    """Run the Kafka-to-ClickHouse host metric streaming job."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:19092")
     topic = os.getenv("HOST_METRICS_TOPIC", "host_metrics")
     checkpoint_location = os.getenv(
         "HOST_METRICS_CHECKPOINT_LOCATION",
-        "/opt/laptop-metrics/spark/checkpoints/host_metrics_console",
+        "/opt/laptop-metrics/spark/checkpoints/host_metrics_clickhouse",
     )
 
     spark = (
-        SparkSession.builder.appName("host-metrics-console")
+        SparkSession.builder.appName("host-metrics-clickhouse")
         .config("spark.sql.session.timeZone", "UTC")
         .getOrCreate()
     )
@@ -123,7 +133,7 @@ def main() -> None:
         topic,
         bootstrap_servers,
     )
-    query = write_to_console(
+    query = write_to_clickhouse(
         read_host_metrics(spark, bootstrap_servers, topic),
         checkpoint_location,
     )

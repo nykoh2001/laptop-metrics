@@ -8,8 +8,8 @@ from pyspark.sql.functions import date_format
 
 from collector.models import HostMetric, ProcessMetric
 from collector.serializers import serialize_metric
-from spark.jobs.host_metrics_console import parse_host_metric_records
-from spark.jobs.process_metrics_console import parse_process_metric_records
+from spark.jobs.host_metrics_sink import parse_host_metric_records
+from spark.jobs.process_metrics_sink import parse_process_metric_records
 
 
 @pytest.fixture(scope="module")

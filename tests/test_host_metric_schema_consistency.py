@@ -8,7 +8,7 @@ from typing import get_type_hints
 from pyspark.sql.types import DoubleType, LongType, StringType
 
 from collector.models import HostMetric
-from spark.jobs.host_metrics_console import host_metric_schema
+from spark.jobs.host_metrics_sink import host_metric_schema
 
 
 def test_host_metric_schema_consistency() -> None:

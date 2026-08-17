@@ -4,8 +4,8 @@
 ### Troubleshoots
 <!-- Main troubleshootings until making these changes -->
 
-### Knowledge Gaps
-<!-- Key knowledges that are the core of the changes -->
+### Key Knowledge
+<!-- Core concepts needed to understand this change, especially concepts learned through troubleshooting. -->
 
 ### Todo
 <!-- Add checkboxes only when non-code-level changes are required. If not, remove `Todo` section -->

@@ -10,11 +10,11 @@ from pyspark.sql.types import DoubleType, LongType, StringType, StructField, Str
 
 try:
     from spark.jobs.clickhouse_sink import (
-        clickhouse_http_config_from_env,
+        clickhouse_jdbc_config_from_env,
         write_stream_to_clickhouse,
     )
 except ModuleNotFoundError:
-    from clickhouse_sink import clickhouse_http_config_from_env, write_stream_to_clickhouse
+    from clickhouse_sink import clickhouse_jdbc_config_from_env, write_stream_to_clickhouse
 
 LOGGER = logging.getLogger(__file__)
 
@@ -128,7 +128,7 @@ def write_to_clickhouse(metrics: DataFrame, checkpoint_location: str) -> Streami
         metrics=metrics,
         checkpoint_location=checkpoint_location,
         table=os.getenv("PROCESS_METRICS_CLICKHOUSE_TABLE", "fact_process_metrics"),
-        config=clickhouse_http_config_from_env(),
+        config=clickhouse_jdbc_config_from_env(),
     )
 
 

@@ -46,7 +46,7 @@ services:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-metrics}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-metrics}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD in .env}
-      CLICKHOUSE_HTTP_URL: http://clickhouse:8123
+      CLICKHOUSE_JDBC_URL: jdbc:clickhouse://clickhouse:8123/${CLICKHOUSE_DB:-metrics}
     command: ["/bin/bash", "-c", "trap 'exit 0' TERM INT; while :; do sleep 86400 & wait $${!}; done"]
     volumes:
       - ./spark:/opt/laptop-metrics/spark

@@ -88,7 +88,9 @@ Host metric:
 docker compose exec spark /opt/spark/bin/spark-submit \
   --master 'local[*]' \
   --conf spark.jars.ivy=/tmp/.ivy2 \
-  --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.8 \
+  --conf spark.driver.userClassPathFirst=true \
+  --conf spark.executor.userClassPathFirst=true \
+  --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.8,com.clickhouse:clickhouse-jdbc:0.8.6 \
   /opt/laptop-metrics/spark/jobs/host_metrics_sink.py
 ```
 
@@ -98,11 +100,13 @@ Process metric:
 docker compose exec spark /opt/spark/bin/spark-submit \
   --master 'local[*]' \
   --conf spark.jars.ivy=/tmp/.ivy2 \
-  --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.8 \
+  --conf spark.driver.userClassPathFirst=true \
+  --conf spark.executor.userClassPathFirst=true \
+  --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.8,com.clickhouse:clickhouse-jdbc:0.8.6 \
   /opt/laptop-metrics/spark/jobs/process_metrics_sink.py
 ```
 
-최초 실행 시 Kafka connector를 내려받기 위해 인터넷 연결이 필요합니다. ClickHouse에는 HTTP `TabSeparated` 형식으로 batch insert합니다. job은 `Ctrl+C`로 종료합니다.
+최초 실행 시 Kafka connector와 ClickHouse JDBC driver를 내려받기 위해 인터넷 연결이 필요합니다. job은 `Ctrl+C`로 종료합니다.
 
 인프라를 중지하거나 제거하려면 다음 명령을 사용합니다. `down`은 named volume을 보존합니다.
 

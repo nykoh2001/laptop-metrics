@@ -49,10 +49,10 @@ services:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-metrics}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-metrics}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD in .env}
+      SECURITY_EVENTS_CHECKPOINT_LOCATION: /tmp/laptop-metrics/security_events_clickhouse
     command: ["/bin/bash", "-c", "trap 'exit 0' TERM INT; while :; do sleep 86400 & wait $${!}; done"]
     volumes:
       - ./spark:/opt/laptop-metrics/spark:ro
-      - spark_checkpoint_data:/opt/laptop-metrics/spark/checkpoints
     networks:
       - metrics_network
 
@@ -130,5 +130,3 @@ volumes:
     name: laptop-metrics-clickhouse-data
   grafana_data:
     name: laptop-metrics-grafana-data
-  spark_checkpoint_data:
-    name: laptop-metrics-spark-checkpoint-data

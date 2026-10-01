@@ -1,47 +1,61 @@
 ## Project Overview
 
-Build a local real-time system monitoring platform for macOS.
+Build a local real-time endpoint security telemetry pipeline for macOS. Local collectors observe
+process state, network connections, listening ports, and optional Docker container lifecycle
+events. Events use one versioned security envelope and flow through Kafka and Spark into
+ClickHouse.
 
-The system continuously collects host and process metrics, streams them through Kafka, standardizes the data using Spark Structured Streaming, performs streaming analytics, stores time-series metrics in ClickHouse, and visualizes results in Grafana.
+The project is implemented incrementally. Only the current roadmap phase should be built; later
+phase capabilities must not be implemented early.
 
-The project is intended as a learning project for streaming data platforms and should resemble a simplified manufacturing data pipeline.
+---
+
+## Roadmap
+
+1. Collect local process, network, and optional Docker telemetry in a common event schema.
+2. Add Kafka raw, normalized, alert, and DLQ topics plus replay.
+3. Add Spark validation, normalization, deduplication, watermarks, windows, and correlation.
+4. Add rule-based threat detection, alerts, and visualization.
+5. Add safe threat simulations, labels, detection metrics, latency, recovery, and reprocessing.
+6. Add behavioral baselines and Isolation Forest anomaly detection.
+
+The current implementation scope is phase 1.
 
 ---
 
 ## Tech Stack
 
 - Language: Python 3.11+
+- Host collection: psutil and an optional Docker CLI event stream
 - Containerization: Docker Compose
-- Streaming: Apache Kafka (KRaft mode)
-- Stream Processing: Spark Structured Streaming
-- Time-series Database: ClickHouse
-- Visualization: Grafana
+- Streaming: Apache Kafka in KRaft mode
+- Stream processing: Spark Structured Streaming
+- Storage: ClickHouse
 
-The metric collector runs directly on the macOS host.
+The collector runs directly on the macOS host. Kafka, Spark, and ClickHouse run in containers.
 
 ---
 
 ## Development Principles
 
 - Prefer a simple working implementation over a feature-complete implementation.
-- Build the pipeline incrementally.
-- Validate each stage before moving to the next.
-- Keep each component loosely coupled.
-- Avoid unnecessary abstractions until they become useful.
+- Build and validate one roadmap phase at a time.
+- Keep collectors, event modeling, publishing, processing, and storage loosely coupled.
+- Avoid unnecessary abstractions and new technologies.
 - Favor readability and maintainability over clever implementations.
-- Do not make architectural changes or introduce new technologies unless explicitly requested by the user.
+- Do not implement future roadmap features unless explicitly requested.
 
 ---
 
 ## Coding Guidelines
 
 - Use Python type hints for all public APIs.
-- Avoid using `Any` unless absolutely necessary.
+- Avoid `Any` unless absolutely necessary.
 - Use Google-style multi-line docstrings for every public function and class.
 - Include `Args`, `Returns`, and `Raises` sections when applicable.
 - Keep functions small and focused.
 - Avoid global mutable state.
-- Configuration should come from environment variables.
+- Read configuration from environment variables.
 - Separate configuration, business logic, and infrastructure.
 - Avoid duplicated code.
 - Prefer composition over inheritance.
@@ -50,90 +64,65 @@ The metric collector runs directly on the macOS host.
 
 ## Project Structure
 
-The project structure may evolve, but should remain roughly organized as:
+Keep functionality roughly organized as:
 
 ```text
-collector/
-spark/
-clickhouse/
-grafana/
-docker/
-configs/
-scripts/
-tests/
+collector/    # host-side event model, collectors, and Kafka publisher
+spark/        # minimal streaming jobs for the current phase
+clickhouse/   # storage schema
+schemas/      # common event contract and examples
+configs/      # configuration files when needed
+scripts/      # local operation helpers
+tests/        # unit, integration, and failure documentation
+docs/         # narrowly scoped project documentation and captured prompts
 ```
 
 Avoid placing unrelated functionality in the same module.
 
 ---
 
-## Metrics
+## Security and Privacy
 
-Initially collect only basic metrics.
-
-### Host Metrics
-
-- CPU
-- Memory
-- Swap
-- Disk usage
-- Disk I/O
-- Network I/O
-
-### Process Metrics
-
-- CPU usage
-- Memory usage
-- Disk I/O
-- Process name
-- PID
-
-The schema will evolve over time.
+- Do not collect command-line arguments, environment variables, file contents, browser data, or
+  other high-risk values by default.
+- Emit a stable pseudonymous host ID, never a raw device name or machine identifier.
+- Pseudonymize user identifiers and replace recognized user-home path prefixes with `$HOME`.
+- Define collected fields with an allowlist; do not add opportunistically available fields.
+- Treat Docker collection as optional; an absent CLI or unavailable daemon must not stop other
+  collectors.
+- Do not install osquery, request Endpoint Security permissions, invoke sudo, or change audit
+  settings automatically.
+- Do not add root execution, privileged containers, host PID or network namespaces,
+  `CAP_SYS_PTRACE`, `CAP_SYS_ADMIN`, Full Disk Access, Endpoint Security entitlements, or a Docker
+  socket mount to increase visibility.
+- Allow null for operating-system fields that are unavailable because of permissions or races.
+- Treat incomplete visibility as normal operation and report only non-sensitive aggregate counts.
 
 ---
 
 ## Testing
 
-Every completed phase should be manually verified.
-
-When adding automated tests:
-
-- Prefer `pytest`.
-- Test business logic separately from infrastructure.
+- Manually verify every completed phase when the environment permits it.
+- Prefer pytest for automated tests.
+- Test event modeling and collector logic separately from infrastructure.
 - Mock external services whenever practical.
-- Every new feature should include tests whenever practical.
+- Add tests for every new feature whenever practical.
+- Record test-discovered failures and their corrections under `tests/docs/`.
 
 ---
 
 ## Logging
 
-Use Python's `logging` module.
-
-Avoid `print()` statements except for temporary debugging.
-
-Log:
-
-- Startup
-- Shutdown
-- Kafka connection
-- Processing failures
-- Unexpected exceptions
+Use Python's `logging` module. Avoid `print()` except for temporary debugging. Log startup,
+shutdown, Kafka connection, optional-source availability, processing failures, and unexpected
+exceptions.
 
 ---
 
 ## Configuration
 
-Configuration should be environment-variable based whenever possible.
-
-Examples:
-
-- Kafka broker
-- Topic names
-- Collection interval
-- ClickHouse connection
-- Log level
-
-Provide a `.env.example`.
+Configuration should be environment-variable based. Maintain `.env.example` for Kafka, collector,
+Spark, and ClickHouse settings. Never commit local credentials or raw host identifiers.
 
 ---
 
@@ -141,44 +130,56 @@ Provide a `.env.example`.
 
 - Do not introduce new production dependencies unless necessary.
 - Prefer the Python standard library whenever practical.
-- Explain why any new dependency is required before using it.
-
----
-
-## Assumptions
-
-- Do not assume missing requirements.
-- If multiple reasonable implementations exist, choose the simplest one.
-- If a design decision could significantly affect the architecture, explain the trade-offs before implementing it.
+- Explain why a new dependency is required before adding it.
 
 ---
 
 ## Before Completing Any Task
-
-Before considering a task complete:
 
 - Ensure the project still runs.
 - Run formatting, linting, type checking, and tests.
 - Do not leave TODO placeholders for implemented features.
 - Update documentation when behavior or architecture changes.
 - Explain major design decisions when introducing new components.
+- Clearly separate verified behavior from environment-dependent checks that could not be run.
 
----
 
-## Future Enhancements
+## Security Policy
 
-These features are intentionally out of scope for the first implementation but should be considered when designing the architecture.
+The repository-wide security requirements are defined in `docs/security-policy.md`.
 
-- Canonical schema evolution
-- Data validation
-- Dead Letter Queue (DLQ)
-- Schema versioning
-- Process name normalization
-- User-reported slowdown events
-- Watermark handling
-- Checkpoint recovery
-- Multi-host support
-- Linux and Windows collectors
-- Root cause analysis
-- ML-based anomaly detection
+You MUST read the entire security policy before making changes involving any of the following:
 
+- host or process telemetry collection;
+- operating-system permissions or privileged APIs;
+- Docker, containers, host mounts, namespaces, capabilities, or the Docker API;
+- Kafka, Spark, ClickHouse, network listeners, or externally reachable services;
+- credentials, secrets, user identifiers, file paths, logs, or captured telemetry;
+- threat detection rules, anomaly detection, or security analytics;
+- threat simulation, adversary emulation, or security testing;
+- automated response actions;
+- telemetry storage, retention, replay, export, or deletion;
+- third-party security agents, system services, kernel features, or elevated dependencies.
+
+The policy is mandatory, not optional reference material. Apply it during design, implementation, testing, documentation, and final review.
+
+Before starting an applicable task:
+
+1. Read `docs/security-policy.md` completely.
+2. Identify which policy sections apply to the requested work.
+3. Prefer partial functionality under least privilege over broader functionality requiring unsafe access.
+4. Do not expand privileges, collection scope, network exposure, retention, or response capabilities beyond the current request.
+5. If the requested implementation conflicts with the policy or requires a listed stop condition, do not work around it. Explain the requirement and risk, then request explicit user direction.
+
+If `docs/security-policy.md` is missing, unreadable, or materially inconsistent with the current implementation, stop security-sensitive work and report the problem.
+
+When completing an applicable task, include in the final report:
+
+- the security policy sections applied;
+- permissions granted and intentionally not granted;
+- sensitive fields collected and intentionally excluded;
+- service and network exposure;
+- tests performed for security requirements;
+- known visibility gaps and deferred risks.
+
+Do not duplicate the full policy in this file. Keep detailed security requirements in `docs/security-policy.md`.

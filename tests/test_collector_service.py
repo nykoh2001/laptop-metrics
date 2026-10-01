@@ -4,43 +4,34 @@ import threading
 from collections.abc import Iterator
 
 from collector.config import CollectorConfig
+from collector.events import create_security_event
 from collector.main import CollectorService
-from collector.models import HostMetric, ProcessMetric
+from collector.models import SecurityEvent
 
 
-class StubCollector:
-    """Return deterministic metrics for service tests."""
+class StubSource:
+    """Return deterministic security events for service tests."""
 
-    def collect_host_metric(self, timestamp: str | None = None) -> HostMetric:
-        """Return one host metric."""
-        return HostMetric(
-            timestamp=timestamp or "timestamp",
-            hostname="host",
-            cpu_usage_percent=1.0,
-            memory_usage_percent=2.0,
-            total_memory_bytes=3,
-            available_memory_bytes=4,
-            swap_usage_percent=5.0,
-            total_swap_bytes=6,
-            used_swap_bytes=7,
-            disk_usage_percent=8.0,
-            disk_read_bytes=9,
-            disk_write_bytes=10,
-            network_bytes_sent=11,
-            network_bytes_received=12,
+    def __init__(self) -> None:
+        """Initialize source state."""
+        self.closed = False
+
+    def collect_events(self, collected_at: str | None = None) -> Iterator[SecurityEvent]:
+        """Yield one process event."""
+        cycle_time = collected_at or "2026-10-01T00:00:01.000000Z"
+        yield create_security_event(
+            host_id="host-0123456789abcdef01234567",
+            source="psutil",
+            event_type="process.state",
+            action="observed",
+            event_time="2026-10-01T00:00:00.000000Z",
+            collected_at=cycle_time,
+            payload={"pid": 1},
         )
 
-    def collect_process_metrics(self, timestamp: str | None = None) -> Iterator[ProcessMetric]:
-        """Yield one process metric."""
-        yield ProcessMetric(
-            timestamp=timestamp or "timestamp",
-            pid=1,
-            process_name="process",
-            cpu_usage_percent=1.0,
-            memory_usage_percent=2.0,
-            rss_memory_bytes=3,
-            process_status="running",
-        )
+    def close(self) -> None:
+        """Record shutdown."""
+        self.closed = True
 
 
 class RecordingPublisher:
@@ -48,44 +39,34 @@ class RecordingPublisher:
 
     def __init__(self) -> None:
         """Initialize recorded state."""
-        self.records: list[tuple[str, HostMetric | ProcessMetric]] = []
-        self.flushed = False
-        self.closed = False
+        self.records: list[tuple[str, SecurityEvent]] = []
 
-    def publish(self, topic: str, metric: HostMetric | ProcessMetric) -> None:
-        """Record one published metric."""
-        self.records.append((topic, metric))
+    def publish(self, topic: str, event: SecurityEvent) -> None:
+        """Record one published event."""
+        self.records.append((topic, event))
 
     def flush(self, timeout_seconds: float = 10.0) -> None:
-        """Record a flush call."""
-        self.flushed = True
+        """Flush no records."""
 
     def close(self, timeout_seconds: float = 10.0) -> None:
-        """Record a close call."""
-        self.closed = True
+        """Close no resources."""
 
 
-def test_run_cycle_publishes_both_metric_types() -> None:
-    """One cycle publishes host and process metrics to separate topics."""
+def test_run_cycle_publishes_all_events_to_single_topic() -> None:
+    """Phase 1 uses exactly one Kafka topic for every event type."""
     config = CollectorConfig(
         kafka_bootstrap_servers=("localhost:9092",),
-        host_metrics_topic="host_metrics",
-        process_metrics_topic="process_metrics",
+        security_events_topic="security_events",
         collection_interval_seconds=5.0,
         kafka_client_id="test",
+        host_id_salt="test-salt",
+        docker_events_enabled=False,
         log_level="INFO",
     )
     publisher = RecordingPublisher()
-    service = CollectorService(
-        config,
-        StubCollector(),
-        publisher,
-        threading.Event(),
-    )
+    service = CollectorService(config, StubSource(), publisher, threading.Event())
 
-    service.run_cycle()
+    count = service.run_cycle()
 
-    assert [topic for topic, _metric in publisher.records] == [
-        "host_metrics",
-        "process_metrics",
-    ]
+    assert count == 1
+    assert [topic for topic, _event in publisher.records] == ["security_events"]

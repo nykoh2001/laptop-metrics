@@ -1,21 +1,21 @@
-"""Kafka publishing adapter for collected metrics."""
+"""Kafka publishing adapter for common security events."""
 
 import logging
 from collections.abc import Callable
 
 from kafka import KafkaProducer
 
-from collector.models import HostMetric, ProcessMetric
-from collector.serializers import serialize_metric
+from collector.models import SecurityEvent
+from collector.serializers import serialize_event
 
-LOGGER = logging.getLogger(__file__)
+LOGGER = logging.getLogger(__name__)
 
 
-class KafkaMetricProducer:
-    """Publish individual JSON metric records to Kafka."""
+class KafkaEventProducer:
+    """Publish individual security events as keyed JSON Kafka records."""
 
     def __init__(self, bootstrap_servers: tuple[str, ...], client_id: str) -> None:
-        """Create a Kafka producer configured for the local Kafka 4 broker.
+        """Create a producer configured for the local Kafka broker.
 
         Args:
             bootstrap_servers: Kafka bootstrap server addresses.
@@ -31,18 +31,22 @@ class KafkaMetricProducer:
         )
         LOGGER.info("Kafka producer configured", extra={"bootstrap_servers": bootstrap_servers})
 
-    def publish(self, topic: str, metric: HostMetric | ProcessMetric) -> None:
-        """Publish one metric as one Kafka record.
+    def publish(self, topic: str, event: SecurityEvent) -> None:
+        """Publish one event using its deterministic identifier as the key.
 
         Args:
             topic: Destination Kafka topic.
-            metric: Metric record to serialize and publish.
+            event: Security event to serialize and publish.
         """
         try:
-            future = self._producer.send(topic, value=serialize_metric(metric))
+            future = self._producer.send(
+                topic,
+                key=event.event_id.encode("utf-8"),
+                value=serialize_event(event),
+            )
             future.add_errback(self._publish_error_callback(topic))
         except Exception:
-            LOGGER.exception("Failed to enqueue Kafka metric", extra={"topic": topic})
+            LOGGER.exception("Failed to enqueue security event", extra={"topic": topic})
 
     def flush(self, timeout_seconds: float = 10.0) -> None:
         """Wait for pending records to complete.

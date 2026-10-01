@@ -367,7 +367,7 @@ def main() -> None:
     topic = os.getenv("SECURITY_EVENTS_TOPIC", "security_events")
     checkpoint_location = os.getenv(
         "SECURITY_EVENTS_CHECKPOINT_LOCATION",
-        "/opt/laptop-metrics/spark/checkpoints/security_events_clickhouse",
+        "/tmp/laptop-metrics/security_events_clickhouse",
     )
     clickhouse = ClickHouseConfig(
         url=os.getenv("CLICKHOUSE_URL", "http://clickhouse:8123/"),

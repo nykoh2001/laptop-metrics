@@ -22,6 +22,9 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_LOG_DIRS: /var/lib/kafka/data
       KAFKA_LOG_RETENTION_HOURS: 168
+    tmpfs:
+      - /mnt/shared/config
+      - /etc/kafka/secrets
     volumes:
       - kafka_data:/var/lib/kafka/data
     healthcheck:
@@ -67,8 +70,9 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-metrics}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?Set CLICKHOUSE_PASSWORD in .env}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    tmpfs:
+      - /var/lib/clickhouse
     volumes:
-      - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --user \"$${CLICKHOUSE_USER}\" --password \"$${CLICKHOUSE_PASSWORD}\" --query 'SELECT 1' >/dev/null"]
@@ -126,7 +130,5 @@ networks:
 volumes:
   kafka_data:
     name: laptop-metrics-kafka-data
-  clickhouse_data:
-    name: laptop-metrics-clickhouse-data
   grafana_data:
     name: laptop-metrics-grafana-data

@@ -164,9 +164,26 @@ def test_clickhouse_schema_has_bounded_retention() -> None:
         encoding="utf-8"
     )
 
+    assert "CREATE TABLE IF NOT EXISTS metrics.security_events" in ddl
     assert "TTL toDateTime(collected_at) + INTERVAL 7 DAY DELETE" in ddl
     compose = (project_root / "docker-compose.yml").read_text(encoding="utf-8")
+    clickhouse_service = compose.split("  clickhouse:", maxsplit=1)[1].split(
+        "  grafana:", maxsplit=1
+    )[0]
+    assert "/var/lib/clickhouse" in clickhouse_service
+    assert "clickhouse_data:" not in compose
     assert "KAFKA_LOG_RETENTION_HOURS: 168" in compose
+
+
+def test_kafka_image_transient_volumes_do_not_create_anonymous_volumes() -> None:
+    """Kafka image-declared scratch paths use tmpfs; broker logs use the named volume."""
+    project_root = Path(__file__).resolve().parents[1]
+    compose = (project_root / "docker-compose.yml").read_text(encoding="utf-8")
+    kafka_service = compose.split("  kafka:", maxsplit=1)[1].split("  spark:", maxsplit=1)[0]
+
+    assert "- /mnt/shared/config" in kafka_service
+    assert "- /etc/kafka/secrets" in kafka_service
+    assert "kafka_data:/var/lib/kafka/data" in kafka_service
 
 
 def test_collector_env_loader_does_not_import_downstream_credentials(

@@ -82,7 +82,9 @@ ClickHouse security_events
 
 최근 실제 smoke test에서는 Kafka `security_events` offset이 2,241에서 2,735로 494 증가했고, 같은 실행 구간에 ClickHouse의 행도 494 증가했다 (`process.state` 389건, `network.connection` 105건). collector는 로컬 `.env`의 안정적인 host ID salt를 읽어 실행했고, 일부 프로세스 네트워크 레코드의 접근 거부는 정상적인 저하 상태로 처리되었다. 누적 ClickHouse 행은 `process.state` 2,076건, `network.connection` 561건, `docker.container.lifecycle` 32건이었다. host telemetry 권한을 확대하거나 sudo, root, privileged container 등의 권한은 사용하지 않았다.
 
-ClickHouse CPU 사용량 조사 중 persistent ClickHouse volume에 `system.trace_log` 약 10.16 GiB, `system.text_log` 약 984 MiB가 쌓인 것을 확인했다. 조사 시점에 `system.metric_log`와 `system.asynchronous_metric_log`의 background merge가 진행 중이었고, ClickHouse CPU는 약 180–306%까지 관측되었다. 일반 쿼리 부하는 낮았으므로 누적 system log merge가 높은 사용량의 주된 원인으로 판단했다.
+ClickHouse CPU 사용량 조사 시 persistent volume에 `system.trace_log` 약 10.16 GiB, `system.text_log` 약 984 MiB가 쌓여 있었고, `system.metric_log` 및 `system.asynchronous_metric_log`의 background merge가 관찰되었다. 이후 과거 메트릭 partition과 사용하지 않는 애플리케이션 테이블을 삭제하고 ClickHouse 데이터 볼륨을 제거했다. ClickHouse는 현재 데이터 디렉터리를 컨테이너 내부 tmpfs에 기록하므로 재시작·재생성 시 데이터가 사라지며, 내장 system log 테이블은 이미지 설정에 따라 다시 생성·적재된다. 로그 적재 최적화는 이번 변경에 포함하지 않았다.
+
+Kafka 4.0.2 이미지가 `/mnt/shared/config` 및 `/etc/kafka/secrets`도 `VOLUME`으로 선언해, Compose에서 별도 경로를 지정하지 않으면 빈 anonymous volume 두 개를 자동 생성했다. 두 경로는 조사 당시 각각 4 KiB의 빈 디렉터리였고 broker log는 `/var/lib/kafka/data` 아래 `laptop-metrics-kafka-data` named volume에 저장되어 있었다. Compose에서 두 scratch 경로를 tmpfs로 덮어 anonymous volume 생성을 방지하고, named Kafka 데이터 볼륨만 유지한다.
 
 ## 5. 남아 있는 환경 제약
 
@@ -99,6 +101,7 @@ ClickHouse CPU 사용량 조사 중 persistent ClickHouse volume에 `system.trac
 - 시스템 전체 네트워크 연결 조회가 제한되면 fallback 결과에 포함되지 않는 연결이 있을 수 있다.
 - Docker CLI가 없거나 daemon 접근 권한이 없으면 lifecycle 이벤트를 수집하지 않는다.
 - Spark checkpoint는 컨테이너 내부 `/tmp/laptop-metrics/security_events_clickhouse`에 저장하며 호스트 bind mount나 Docker volume으로 지속 보존하지 않는다. Spark 컨테이너를 재생성하면 checkpoint가 사라지므로 장애 복구 보장은 후속 단계에서 지속 저장소와 함께 다룬다.
+- ClickHouse `/var/lib/clickhouse`는 Docker named/anonymous volume 대신 컨테이너 tmpfs에 둔다. 컨테이너 중지·재생성 시 ClickHouse 데이터가 삭제되며, 활성화된 내장 진단 로그가 tmpfs의 메모리를 계속 사용할 수 있다.
 - process command line과 arguments, 환경변수, 파일 내용, 브라우저 정보, credential, token 및 secret은 의도적으로 수집하지 않는다.
 - 커널 감사, Endpoint Security, eBPF 또는 osquery 기반 이벤트는 이번 단계 범위에 포함하지 않았다.
 

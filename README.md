@@ -56,5 +56,6 @@ docker compose exec clickhouse sh -c 'clickhouse-client --user "$CLICKHOUSE_USER
 - Docker CLI 또는 daemon이 없으면 Docker 이벤트만 비활성화되고 다른 collector는 계속 동작합니다.
 - Docker socket mount, sudo/root, privileged container, host PID/network, 추가 capability, Full Disk Access, Endpoint Security entitlement를 사용하거나 요구하지 않습니다.
 - Docker 서비스 포트는 loopback에만 공개되며 Kafka·ClickHouse 이벤트는 7일 후 삭제됩니다.
+- ClickHouse 데이터 디렉터리는 컨테이너 내부 tmpfs에만 두므로 컨테이너 중지·재생성 시 적재 데이터가 사라집니다. ClickHouse 내부 진단 로그는 계속 생성되며 tmpfs 메모리를 사용할 수 있습니다.
 - 최초 Spark 실행은 Kafka connector package 다운로드를 위한 인터넷 연결이 필요합니다.
 - osquery 설치, sudo 실행, 감사 설정 변경, Endpoint Security 권한 요청은 수행하지 않습니다.

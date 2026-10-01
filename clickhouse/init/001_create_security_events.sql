@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS security_events
+CREATE TABLE IF NOT EXISTS metrics.security_events
 (
     schema_version LowCardinality(String),
     event_id UUID,

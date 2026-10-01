@@ -3,13 +3,15 @@ set -eu
 
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 python_executable="$project_dir/.venv/bin/python"
-template="$project_dir/launchd/com.local.system-metric-collector.plist.example"
+template="$project_dir/launchd/com.local.security-telemetry-collector.plist.example"
 wrapper_template="$project_dir/scripts/run_collector.sh"
 launch_agents_dir="$HOME/Library/LaunchAgents"
 logs_dir="$HOME/Library/Logs/laptop-metrics"
-service_plist="$launch_agents_dir/com.local.system-metric-collector.plist"
+service_plist="$launch_agents_dir/com.local.security-telemetry-collector.plist"
 service_wrapper="$project_dir/.collector-launchd-wrapper.sh"
-service_label="com.local.system-metric-collector"
+service_label="com.local.security-telemetry-collector"
+legacy_service_label="com.local.system-metric-collector"
+legacy_service_plist="$launch_agents_dir/$legacy_service_label.plist"
 domain="gui/$(id -u)"
 
 if [ ! -x "$python_executable" ]; then
@@ -39,10 +41,14 @@ sed -e "s|__PROJECT_DIR__|$project_dir|g" \
   "$template" > "$service_plist"
 plutil -lint "$service_plist"
 
+launchctl bootout "$domain/$legacy_service_label" 2>/dev/null || true
+if [ -f "$legacy_service_plist" ]; then
+  rm "$legacy_service_plist"
+  echo "Removed legacy $legacy_service_label launch agent."
+fi
 launchctl bootout "$domain/$service_label" 2>/dev/null || true
 launchctl bootstrap "$domain" "$service_plist"
 launchctl enable "$domain/$service_label"
 launchctl kickstart "$domain/$service_label"
 echo "Installed $service_label"
 echo "Logs: $logs_dir"
-

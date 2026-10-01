@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.local.system-metric-collector</string>
+  <string>com.local.security-telemetry-collector</string>
   <key>ProgramArguments</key>
   <array>
     <string>__PROJECT_DIR__/.collector-launchd-wrapper.sh</string>
@@ -27,4 +27,3 @@
   <string>__HOME_DIR__/Library/Logs/laptop-metrics/collector.stderr.log</string>
 </dict>
 </plist>
-

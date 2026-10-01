@@ -164,7 +164,7 @@ def test_clickhouse_schema_has_bounded_retention() -> None:
         encoding="utf-8"
     )
 
-    assert "TTL collected_at + INTERVAL 7 DAY DELETE" in ddl
+    assert "TTL toDateTime(collected_at) + INTERVAL 7 DAY DELETE" in ddl
     compose = (project_root / "docker-compose.yml").read_text(encoding="utf-8")
     assert "KAFKA_LOG_RETENTION_HOURS: 168" in compose
 

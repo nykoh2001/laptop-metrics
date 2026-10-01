@@ -14,5 +14,5 @@ CREATE TABLE IF NOT EXISTS security_events
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(collected_at)
 ORDER BY (host_id, event_time, event_id)
-TTL collected_at + INTERVAL 7 DAY DELETE
+TTL toDateTime(collected_at) + INTERVAL 7 DAY DELETE
 COMMENT 'Phase-1 common endpoint security telemetry events';

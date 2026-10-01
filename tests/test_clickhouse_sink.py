@@ -54,6 +54,7 @@ def test_clickhouse_insert_url_encodes_database_and_query() -> None:
     assert url.startswith("http://clickhouse:8123?")
     assert "database=metrics-local" in url
     assert "INSERT+INTO+security_events+FORMAT+JSONEachRow" in url
+    assert "date_time_input_format=best_effort" in url
     assert "secret" not in url
 
 

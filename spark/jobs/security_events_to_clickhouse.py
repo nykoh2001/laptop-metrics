@@ -5,7 +5,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from uuid import UUID
@@ -16,6 +16,7 @@ from pyspark.sql.streaming import StreamingQuery
 from pyspark.sql.types import StringType, StructField, StructType
 
 LOGGER = logging.getLogger(__name__)
+_UTC = timezone.utc  # noqa: UP017 - The pinned Spark image runs Python 3.10.
 
 _COMMON_FIELDS = frozenset(
     {
@@ -140,6 +141,7 @@ def clickhouse_insert_url(config: ClickHouseConfig) -> str:
         {
             "database": config.database,
             "query": "INSERT INTO security_events FORMAT JSONEachRow",
+            "date_time_input_format": "best_effort",
         }
     )
     return f"{config.url.rstrip('/')}?{parameters}"
@@ -311,10 +313,10 @@ def _parse_timestamp(value: object) -> datetime | None:
         return None
     if parsed.tzinfo is None:
         return None
-    normalized = parsed.astimezone(UTC)
-    if normalized < datetime(2000, 1, 1, tzinfo=UTC):
+    normalized = parsed.astimezone(_UTC)
+    if normalized < datetime(2000, 1, 1, tzinfo=_UTC):
         return None
-    if normalized > datetime.now(UTC) + timedelta(days=1):
+    if normalized > datetime.now(_UTC) + timedelta(days=1):
         return None
     return normalized
 

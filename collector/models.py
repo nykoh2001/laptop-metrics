@@ -1,36 +1,32 @@
-"""Metric value objects."""
+"""Versioned security telemetry event model."""
 
 from dataclasses import dataclass
 
-
-@dataclass(frozen=True, slots=True)
-class HostMetric:
-    """A snapshot of macOS host resource usage."""
-
-    timestamp: str
-    hostname: str
-    cpu_usage_percent: float
-    memory_usage_percent: float
-    total_memory_bytes: int
-    available_memory_bytes: int
-    swap_usage_percent: float
-    total_swap_bytes: int
-    used_swap_bytes: int
-    disk_usage_percent: float
-    disk_read_bytes: int
-    disk_write_bytes: int
-    network_bytes_sent: int
-    network_bytes_received: int
+JsonScalar = str | int | float | bool | None
 
 
 @dataclass(frozen=True, slots=True)
-class ProcessMetric:
-    """A snapshot of one process running on the macOS host."""
+class SecurityEvent:
+    """One event in the common security telemetry envelope.
 
-    timestamp: str
-    pid: int
-    process_name: str
-    cpu_usage_percent: float
-    memory_usage_percent: float
-    rss_memory_bytes: int
-    process_status: str
+    Args:
+        schema_version: Version of the common event contract.
+        event_id: Deterministic identifier for the event contents.
+        event_time: UTC time at which the observed event occurred.
+        collected_at: UTC time at which the collector observed the event.
+        host_id: Stable pseudonymous identifier for the source host.
+        source: Collector that produced the event.
+        event_type: Namespaced category of the event.
+        action: Observed lifecycle or state action.
+        payload: Event-specific fields containing JSON scalar values.
+    """
+
+    schema_version: str
+    event_id: str
+    event_time: str
+    collected_at: str
+    host_id: str
+    source: str
+    event_type: str
+    action: str
+    payload: dict[str, JsonScalar]

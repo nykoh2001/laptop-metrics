@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/schemas/security-event-1.0.0.json",
+  "title": "SecurityEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "event_time",
+    "collected_at",
+    "host_id",
+    "source",
+    "event_type",
+    "action",
+    "payload"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "event_id": {"type": "string", "format": "uuid"},
+    "event_time": {"type": "string", "format": "date-time"},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "host_id": {"type": "string", "pattern": "^host-[0-9a-f]{24}$"},
+    "source": {"type": "string", "minLength": 1},
+    "event_type": {"type": "string", "minLength": 1},
+    "action": {"type": "string", "minLength": 1},
+    "payload": {"type": "object"}
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "source": {"const": "psutil"},
+        "event_type": {"const": "process.state"},
+        "action": {"const": "observed"},
+        "payload": {"$ref": "#/$defs/processPayload"}
+      }
+    },
+    {
+      "properties": {
+        "source": {"const": "psutil"},
+        "event_type": {"const": "network.connection"},
+        "action": {"enum": ["observed", "listening"]},
+        "payload": {"$ref": "#/$defs/networkPayload"}
+      }
+    },
+    {
+      "properties": {
+        "source": {"const": "docker"},
+        "event_type": {"const": "docker.container.lifecycle"},
+        "payload": {"$ref": "#/$defs/dockerPayload"}
+      }
+    }
+  ],
+  "$defs": {
+    "processPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pid", "ppid", "process_name", "executable_path", "user_id", "start_time"],
+      "properties": {
+        "pid": {"type": ["integer", "null"], "minimum": 0},
+        "ppid": {"type": ["integer", "null"], "minimum": 0},
+        "process_name": {"type": ["string", "null"], "maxLength": 256},
+        "executable_path": {"type": ["string", "null"], "maxLength": 4096},
+        "user_id": {
+          "type": ["string", "null"],
+          "pattern": "^user-[0-9a-f]{24}$"
+        },
+        "start_time": {"type": ["string", "null"], "format": "date-time"}
+      }
+    },
+    "networkPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "local_address",
+        "local_port",
+        "remote_address",
+        "remote_port",
+        "connection_status",
+        "pid"
+      ],
+      "properties": {
+        "local_address": {"type": ["string", "null"], "maxLength": 255},
+        "local_port": {"type": ["integer", "null"], "minimum": 0, "maximum": 65535},
+        "remote_address": {"type": ["string", "null"], "maxLength": 255},
+        "remote_port": {"type": ["integer", "null"], "minimum": 0, "maximum": 65535},
+        "connection_status": {"type": "string", "maxLength": 64},
+        "pid": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "dockerPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["container_id"],
+      "properties": {
+        "container_id": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    }
+  }
+}

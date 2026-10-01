@@ -1,1 +1,1 @@
-"""macOS host and process metric collector."""
+"""Local endpoint security telemetry collector."""

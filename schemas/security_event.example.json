@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0.0",
+  "event_id": "6331f3eb-17cd-5d73-89d0-b2f96f934f89",
+  "event_time": "2026-10-01T00:00:00.000000Z",
+  "collected_at": "2026-10-01T00:00:05.000000Z",
+  "host_id": "host-0123456789abcdef01234567",
+  "source": "psutil",
+  "event_type": "process.state",
+  "action": "observed",
+  "payload": {
+    "pid": 123,
+    "ppid": 1,
+    "process_name": "example",
+    "executable_path": "$HOME/bin/example",
+    "user_id": "user-89abcdef0123456789abcdef",
+    "start_time": "2026-10-01T00:00:00.000000Z"
+  }
+}

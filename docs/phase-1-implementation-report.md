@@ -26,7 +26,7 @@
 | `clickhouse/init/001_create_security_events.sql` | 공통 보안 이벤트 테이블 및 보존 정책 정의 |
 | `schemas/security_event.schema.json` | 공통 이벤트와 이벤트별 payload의 폐쇄형 JSON Schema 정의 |
 | `schemas/security_event.example.json` | 공통 이벤트 예시 |
-| `docker-compose.yml` | Kafka 이후 파이프라인 설정, loopback port binding 및 Spark checkpoint volume 구성 |
+| `docker-compose.yml` | Kafka 이후 파이프라인 설정, loopback port binding 및 Spark checkpoint 경로 구성 |
 | `launchd/com.local.security-telemetry-collector.plist.example` | macOS native collector 실행 예시 |
 | `scripts/` | collector 실행·서비스 설치와 ClickHouse schema 적용 스크립트 |
 | `.env.example` | phase 1 실행에 필요한 최소 환경변수 예시 |
@@ -68,8 +68,8 @@ ClickHouse security_events
 
 | 검증 항목 | 결과 |
 | --- | --- |
-| 전체 pytest | 41 passed, 1 skipped |
-| Kafka integration test | Docker daemon을 사용할 수 없어 1건 skip |
+| 전체 pytest (Docker Kafka integration 활성화) | 42 passed |
+| Kafka integration test | Docker Kafka `localhost:9092` 대상 실제 publish/consume 통과 |
 | Spark parsing, storage guard 및 mocked ClickHouse HTTP 전달 | 통과 |
 | Ruff format 및 lint | 통과 |
 | mypy strict | 통과 |
@@ -77,10 +77,12 @@ ClickHouse security_events
 | Docker Compose config validation | 통과 |
 | shell syntax 및 launchd plist lint | 통과 |
 | sdist/wheel build 및 pip dependency check | 통과 |
-| 실제 Kafka → Spark → ClickHouse smoke test | Docker daemon 비가용으로 확인하지 못함 |
-| 실제 host process/network collector smoke test | 실행 sandbox의 macOS `sysctl` 제한으로 확인하지 못함 |
+| 실제 Kafka → Spark → ClickHouse smoke test | Docker Kafka와 Spark를 거쳐 ClickHouse 적재 확인 |
+| 실제 host process/network collector smoke test | macOS 일반 사용자 권한의 native collector로 확인 |
 
-Spark 테스트는 로컬 Py4J loopback 통신만 sandbox 밖에서 허용하여 실행했다. host telemetry 권한을 확대하거나 sudo, root, privileged container 등의 권한은 사용하지 않았다.
+최근 실제 smoke test에서는 Kafka `security_events` offset이 2,241에서 2,735로 494 증가했고, 같은 실행 구간에 ClickHouse의 행도 494 증가했다 (`process.state` 389건, `network.connection` 105건). collector는 로컬 `.env`의 안정적인 host ID salt를 읽어 실행했고, 일부 프로세스 네트워크 레코드의 접근 거부는 정상적인 저하 상태로 처리되었다. 누적 ClickHouse 행은 `process.state` 2,076건, `network.connection` 561건, `docker.container.lifecycle` 32건이었다. host telemetry 권한을 확대하거나 sudo, root, privileged container 등의 권한은 사용하지 않았다.
+
+ClickHouse CPU 사용량 조사 중 persistent ClickHouse volume에 `system.trace_log` 약 10.16 GiB, `system.text_log` 약 984 MiB가 쌓인 것을 확인했다. 조사 시점에 `system.metric_log`와 `system.asynchronous_metric_log`의 background merge가 진행 중이었고, ClickHouse CPU는 약 180–306%까지 관측되었다. 일반 쿼리 부하는 낮았으므로 누적 system log merge가 높은 사용량의 주된 원인으로 판단했다.
 
 ## 5. 남아 있는 환경 제약
 
@@ -96,6 +98,7 @@ Spark 테스트는 로컬 Py4J loopback 통신만 sandbox 밖에서 허용하여
 - 권한이 없어 읽을 수 없는 프로세스의 실행 파일 경로, 사용자 및 시작 시각은 `null`이거나 해당 이벤트가 안전하게 생략될 수 있다.
 - 시스템 전체 네트워크 연결 조회가 제한되면 fallback 결과에 포함되지 않는 연결이 있을 수 있다.
 - Docker CLI가 없거나 daemon 접근 권한이 없으면 lifecycle 이벤트를 수집하지 않는다.
+- Spark checkpoint는 컨테이너 내부 `/tmp/laptop-metrics/security_events_clickhouse`에 저장하며 호스트 bind mount나 Docker volume으로 지속 보존하지 않는다. Spark 컨테이너를 재생성하면 checkpoint가 사라지므로 장애 복구 보장은 후속 단계에서 지속 저장소와 함께 다룬다.
 - process command line과 arguments, 환경변수, 파일 내용, 브라우저 정보, credential, token 및 secret은 의도적으로 수집하지 않는다.
 - 커널 감사, Endpoint Security, eBPF 또는 osquery 기반 이벤트는 이번 단계 범위에 포함하지 않았다.
 
@@ -109,4 +112,4 @@ Spark 테스트는 로컬 Py4J loopback 통신만 sandbox 밖에서 허용하여
 | Docker socket mount | 사실상 host Docker daemon 제어 권한을 container에 제공함 | native collector가 기존 Docker CLI 접근 권한을 사용할 때만 optional 수집함 |
 | 감사 설정 변경, eBPF 또는 추가 센서 | 시스템 전역 관측과 운영 위험을 추가하며 phase 1 요구에 필요하지 않음 | 향후 구체적인 탐지 시나리오가 요구할 때 별도 단계로 검토함 |
 
-저장소 보안 정책 중 데이터 최소화, 권한 제한, secret 처리, dependency 및 artifact 검증, 로깅·오류 처리, 테스트, 데이터 보존 정책을 적용했다. Docker daemon을 사용할 수 없어 실행 중인 image 내부 사용자까지 확인하지는 못했지만 Compose에는 privileged mode, 추가 capability, host PID/network namespace 또는 민감한 host mount를 추가하지 않았다.
+저장소 보안 정책 중 데이터 최소화, 권한 제한, secret 처리, dependency 및 artifact 검증, 로깅·오류 처리, 테스트, 데이터 보존 정책을 적용했다. Docker daemon을 사용한 smoke test에서도 Compose에 privileged mode, 추가 capability, host PID/network namespace 또는 민감한 host mount를 추가하지 않았다. Spark job은 image의 일반 사용자 `spark`로 실행됨을 확인했다.

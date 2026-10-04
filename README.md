@@ -38,6 +38,14 @@ docker compose exec spark /opt/spark/bin/spark-submit --master 'local[*]' --conf
 docker compose exec clickhouse sh -c 'clickhouse-client --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" --database "$CLICKHOUSE_DB" --query "SELECT event_type, count() FROM security_events GROUP BY event_type"'
 ```
 
+Kafka broker가 실행 중일 때 실제 publish/consume integration test를 포함해 전체 테스트를 실행하려면 opt-in 환경변수를 지정합니다.
+
+```bash
+RUN_KAFKA_INTEGRATION_TESTS=1 .venv/bin/python -m pytest
+```
+
+이 변수가 없으면 외부 Kafka broker가 필요한 integration test는 skip 처리됩니다.
+
 ## 현재 이벤트와 공통 필드
 
 | 이벤트 | 내용 |
@@ -55,7 +63,11 @@ docker compose exec clickhouse sh -c 'clickhouse-client --user "$CLICKHOUSE_USER
 - `.env`의 `HOST_ID_SALT`는 외부에 공유하지 않을 안정적인 로컬 값으로 변경해야 합니다.
 - Docker CLI 또는 daemon이 없으면 Docker 이벤트만 비활성화되고 다른 collector는 계속 동작합니다.
 - Docker socket mount, sudo/root, privileged container, host PID/network, 추가 capability, Full Disk Access, Endpoint Security entitlement를 사용하거나 요구하지 않습니다.
-- Docker 서비스 포트는 loopback에만 공개되며 Kafka·ClickHouse 이벤트는 7일 후 삭제됩니다.
-- ClickHouse 데이터 디렉터리는 컨테이너 내부 tmpfs에만 두므로 컨테이너 중지·재생성 시 적재 데이터가 사라집니다. ClickHouse 내부 진단 로그는 계속 생성되며 tmpfs 메모리를 사용할 수 있습니다.
+- 기본 수집 간격은 30초이며 `COLLECTION_INTERVAL_SECONDS`로 바꿀 수 있습니다. 한 주기가 끝난 뒤 다음 대기를 시작하므로 느린 수집 주기가 겹치지 않습니다.
+- Kafka `security_events` 보관 기간은 1일입니다. 시간 기반 보관은 세그먼트 단위로 적용되며, 저유량 topic도 만료되도록 세그먼트를 1시간마다 roll하고 broker가 주기적으로 정리합니다. Spark가 1일 넘게 중단되면 Kafka에서 이전 이벤트가 만료되어 처리하지 못할 수 있습니다.
+- ClickHouse 원본 이벤트는 `collected_at` 기준 7일 TTL을 사용하며 실제 삭제는 비동기 merge 시점에 이뤄집니다. 수집 7일 보관을 기준으로 삼아 오래 실행 중인 process의 과거 `event_time` 때문에 새로 수집한 행이 일찍 만료되지 않게 합니다. Spark는 수집 주기에 맞춘 30초 micro-batch로 최대 500행 또는 1MiB 단위의 partition insert를 보냅니다. 재시도나 같은 topic의 병렬 query 시 ClickHouse 중복 행이 생길 수 있어 exactly-once 쓰기는 보장하지 않습니다.
+- Spark checkpoint는 컨테이너의 `/tmp`에 있습니다. 컨테이너 재생성으로 checkpoint가 사라지면 새 query는 Kafka `latest`부터 시작하므로 미처리 이벤트가 누락될 수 있습니다.
+- Docker 서비스 포트는 loopback에만 공개됩니다. Kafka 데이터는 `laptop-metrics-kafka-data` named volume에 저장하고, ClickHouse 데이터는 컨테이너 내부 tmpfs에 두므로 컨테이너를 제거하거나 재생성하면 사라집니다.
+- ClickHouse 내부 진단 로그는 계속 생성되며 tmpfs 메모리를 사용할 수 있습니다.
 - 최초 Spark 실행은 Kafka connector package 다운로드를 위한 인터넷 연결이 필요합니다.
 - osquery 설치, sudo 실행, 감사 설정 변경, Endpoint Security 권한 요청은 수행하지 않습니다.

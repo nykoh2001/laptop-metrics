@@ -107,7 +107,11 @@ Avoid placing unrelated functionality in the same module.
 - Test event modeling and collector logic separately from infrastructure.
 - Mock external services whenever practical.
 - Add tests for every new feature whenever practical.
-- Record test-discovered failures and their corrections under `tests/docs/`.
+- When an external service required by an opt-in integration test is available, set its
+  `RUN_*_INTEGRATION_TESTS=1` flag and run the test; do not count a skipped integration test as
+  verified.
+- Record test-discovered failures and their corrections under the relevant `tests/<area>/docs/`
+  directory.
 
 ---
 
@@ -142,6 +146,46 @@ Spark, and ClickHouse settings. Never commit local credentials or raw host ident
 - Update documentation when behavior or architecture changes.
 - Explain major design decisions when introducing new components.
 - Clearly separate verified behavior from environment-dependent checks that could not be run.
+
+## Roadmap Implementation Reports
+
+- Create `docs/phase-N-implementation-report.md` when the originally specified implementation for
+  roadmap phase N is completed, using `docs/phase-1-implementation-report.md` as the format
+  reference.
+- Record follow-up work that extends an already implemented phase in that phase's existing report.
+- Do not create an implementation report for a roadmap phase that has not been implemented.
+- Keep the report factual: describe the inspected baseline, changed files, event/data flow,
+  automated and end-to-end verification, and remaining environment or security constraints.
+- Separate verified results from checks that were not run. Do not turn capacity assumptions,
+  planned behavior, or roadmap scope into measured results.
+- Keep the report aligned with the current roadmap phase; do not use report writing as a reason to
+  implement later-phase capabilities.
+
+## Implementation Prompt Archive
+
+- Add a prompt file under `docs/prompts/` only when the user explicitly asks to document a prompt.
+- When asked to record prompts for a phase, record the initial prompt only. Do not add follow-up
+  prompts unless the user explicitly asks to include them.
+- Preserve the user's request and constraints without adding assistant plans or conclusions. Do not
+  archive `.env` contents, credentials, raw host identifiers, or captured telemetry; redact such
+  values only when needed and identify the redaction.
+- Mention the added prompt record path in the implementation report or final response.
+
+## Pull Request Descriptions
+
+- Before creating or editing a pull request, read the applicable files under
+  `.github/PULL_REQUEST_TEMPLATE/`. For a feature pull request, follow `feature.md` headings and
+  instructions exactly.
+- Include the template's `Architecture (Diagram)`, `Summary`, and `Verification` sections. Write the
+  architecture as an English ASCII diagram based on the current source and Compose configuration;
+  do not invent topics, partitions, consumer groups, tables, volumes, or services. Mark planned
+  components explicitly.
+- Write the summary and verification in Korean noun-phrase bullets, report only facts supported by
+  the current diff or executed checks, and list no more than five verification items. Mark checks
+  that were not run as `미실행 (사유: ...)`.
+- Remove instructional HTML comments from the final pull request description.
+- If a template refers to an example file that is absent from the repository, follow the available
+  template itself and do not fabricate example content.
 
 
 ## Security Policy

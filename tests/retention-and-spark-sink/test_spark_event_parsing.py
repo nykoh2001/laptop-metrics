@@ -2,19 +2,16 @@
 
 import json
 from collections.abc import Iterator
-from urllib.request import Request
 
 import pytest
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import date_format
 
-import spark.jobs.security_events_to_clickhouse as sink_module
 from collector.events import create_security_event
 from collector.serializers import serialize_event
 from spark.jobs.security_events_to_clickhouse import (
-    ClickHouseConfig,
-    insert_batch,
     parse_security_event_records,
+    validate_clickhouse_json_row,
 )
 
 
@@ -74,11 +71,8 @@ def test_security_event_is_parsed_for_clickhouse(spark_session: SparkSession) ->
     assert payload["remote_address"] is None
 
 
-def test_parsed_event_passes_storage_guard_and_http_sink(
-    spark_session: SparkSession,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A collector event survives parse, validation, and sink serialization."""
+def test_parsed_event_passes_clickhouse_storage_guard(spark_session: SparkSession) -> None:
+    """A collector event survives Spark parsing and sink row validation."""
     event = create_security_event(
         host_id="host-0123456789abcdef01234567",
         source="psutil",
@@ -98,41 +92,10 @@ def test_parsed_event_passes_storage_guard_and_http_sink(
     kafka_records = spark_session.createDataFrame([(serialize_event(event),)], "value binary")
     parsed = parse_security_event_records(kafka_records)
 
-    class FakeResponse:
-        """Act as a successful ClickHouse response."""
-
-        def __enter__(self) -> "FakeResponse":
-            """Enter the context."""
-            return self
-
-        def __exit__(self, *args: object) -> None:
-            """Exit the context."""
-
-        def read(self) -> bytes:
-            """Return an empty response body."""
-            return b""
-
-    captured: list[Request] = []
-
-    def fake_urlopen(request: Request, timeout: int) -> FakeResponse:
-        captured.append(request)
-        assert timeout == 10
-        return FakeResponse()
-
-    monkeypatch.setattr(sink_module, "urlopen", fake_urlopen)
-    insert_batch(
-        parsed,
-        0,
-        ClickHouseConfig(
-            url="http://clickhouse:8123/",
-            database="metrics",
-            user="metrics",
-            password="credential-placeholder",
-        ),
-    )
-
-    assert len(captured) == 1
-    assert captured[0].data is not None
-    inserted = json.loads(captured[0].data)
+    row_json = parsed.toJSON().first()
+    assert row_json is not None
+    sanitized = validate_clickhouse_json_row(row_json)
+    assert sanitized is not None
+    inserted = json.loads(sanitized)
     assert inserted["event_id"] == event.event_id
     assert json.loads(inserted["payload"])["process_name"] == "launchd"

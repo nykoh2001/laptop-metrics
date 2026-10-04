@@ -143,6 +143,20 @@ Spark, and ClickHouse settings. Never commit local credentials or raw host ident
 - Explain major design decisions when introducing new components.
 - Clearly separate verified behavior from environment-dependent checks that could not be run.
 
+## Roadmap Implementation Reports
+
+- Create `docs/phase-N-implementation-report.md` when the originally specified implementation for
+  roadmap phase N is completed, using `docs/phase-1-implementation-report.md` as the format
+  reference.
+- Record follow-up work that extends an already implemented phase in that phase's existing report.
+- Do not create an implementation report for a roadmap phase that has not been implemented.
+- Keep the report factual: describe the inspected baseline, changed files, event/data flow,
+  automated and end-to-end verification, and remaining environment or security constraints.
+- Separate verified results from checks that were not run. Do not turn capacity assumptions,
+  planned behavior, or roadmap scope into measured results.
+- Keep the report aligned with the current roadmap phase; do not use report writing as a reason to
+  implement later-phase capabilities.
+
 
 ## Security Policy
 

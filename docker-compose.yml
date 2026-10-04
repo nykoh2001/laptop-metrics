@@ -21,7 +21,9 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_LOG_DIRS: /var/lib/kafka/data
-      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_RETENTION_MS: 86400000
+      KAFKA_LOG_ROLL_MS: 3600000
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
     tmpfs:
       - /mnt/shared/config
       - /etc/kafka/secrets

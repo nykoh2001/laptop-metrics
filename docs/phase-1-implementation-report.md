@@ -33,8 +33,8 @@
 | `README.md` | phase 1 범위와 최소 실행·확인 방법으로 전면 재작성 |
 | `AGENTS.md` | endpoint security telemetry 프로젝트 기준으로 개요와 지침 갱신 |
 | `docs/prompts/` | 이번 작업에 입력된 요구사항 원문 보관 |
-| `tests/` | 이벤트 모델, collector, privacy, 권한 저하, Kafka, Spark 및 ClickHouse 경계 테스트 |
-| `tests/docs/` | 테스트 중 확인한 실패 사례, 원인 및 개선 방법 기록 |
+| `tests/phase-1-collector/` | 이벤트 모델, collector, privacy, 권한 저하 관련 테스트와 이슈 기록 |
+| `tests/retention-and-spark-sink/` | Kafka·ClickHouse 보존, Spark sink, 보안 경계 테스트와 이슈 기록 |
 
 기존 CPU·메모리 중심 모델, schema, Spark console job, ClickHouse metric DDL과 이에 종속된 테스트는 참조 관계를 확인한 뒤 제거했다.
 
@@ -85,6 +85,36 @@ ClickHouse security_events
 ClickHouse CPU 사용량 조사 시 persistent volume에 `system.trace_log` 약 10.16 GiB, `system.text_log` 약 984 MiB가 쌓여 있었고, `system.metric_log` 및 `system.asynchronous_metric_log`의 background merge가 관찰되었다. 이후 과거 메트릭 partition과 사용하지 않는 애플리케이션 테이블을 삭제하고 ClickHouse 데이터 볼륨을 제거했다. ClickHouse는 현재 데이터 디렉터리를 컨테이너 내부 tmpfs에 기록하므로 재시작·재생성 시 데이터가 사라지며, 내장 system log 테이블은 이미지 설정에 따라 다시 생성·적재된다. 로그 적재 최적화는 이번 변경에 포함하지 않았다.
 
 Kafka 4.0.2 이미지가 `/mnt/shared/config` 및 `/etc/kafka/secrets`도 `VOLUME`으로 선언해, Compose에서 별도 경로를 지정하지 않으면 빈 anonymous volume 두 개를 자동 생성했다. 두 경로는 조사 당시 각각 4 KiB의 빈 디렉터리였고 broker log는 `/var/lib/kafka/data` 아래 `laptop-metrics-kafka-data` named volume에 저장되어 있었다. Compose에서 두 scratch 경로를 tmpfs로 덮어 anonymous volume 생성을 방지하고, named Kafka 데이터 볼륨만 유지한다.
+
+### 2026-10-04 phase 1 보완: 주기, 보존 및 sink 배치
+
+- Collector 기본 주기를 30초로 설정하고, collector 설정값을 `.env`에서 읽도록 정리했다. `.env.example`에는 실제 비밀값 대신 실행용 샘플 값을 유지한다. Collector는 한 주기를 끝낸 뒤 interval만큼 대기하므로 수집 주기가 겹치지 않는다. process/network collector는 매 주기 전체 상태 스냅샷을 발행하며, 이벤트 의미를 바꾸거나 요구된 이벤트를 누락시키는 deduplication은 추가하지 않았다.
+- Kafka `security_events` topic에 시간 기반 `retention.ms=86400000`을 적용했다. 저유량 topic의 만료 세그먼트도 정리되도록 `segment.ms=3600000` 및 broker cleanup 주기를 확인했다. Kafka 삭제는 세그먼트 단위이므로 1일은 정확한 초 단위 삭제 시각이 아니다. Spark가 1일 넘게 중단되면 Kafka에서 재처리할 이벤트가 만료될 수 있다.
+- ClickHouse 기본 압축과 MergeTree 설정을 확인하고 원본 `security_events`에 `collected_at + INTERVAL 7 DAY` TTL을 사용했다. 수집 후 7일 보관이 목적이므로 과거 process 상태의 `event_time`보다 collector 수집 시각을 기준으로 삼았다. TTL은 비동기 merge 시 정리되며, 기존 7일 초과 데이터도 TTL 대상이지만 즉시 삭제되지는 않는다. 테이블 재생성이나 데이터 볼륨 삭제를 통한 TTL 적용은 하지 않았다.
+- `write_to_clickhouse`의 30초 processing-time trigger는 30초마다 스냅샷을 내보내는 현재 collector에 맞춘 설정이다. 이전 1초 trigger는 새 관측 이벤트가 없는 구간에도 빈 micro-batch 확인을 반복하고 수집 주기 사이에 30회 실행될 수 있었다. 30초 trigger는 불필요한 polling을 줄이며, batch 처리 완료 시점에 따라 sink 지연이 최대 한 수집 간격 정도 늘 수 있다. phase 1에는 실시간 alert 기능이 없어 이 지연을 감수하는 선택이다.
+- Kafka 레코드별 insert는 사용하지 않는다. `write_to_clickhouse`가 Spark micro-batch를 `insert_batch`로 전달하고, `insert_batch`가 DataFrame의 `toJSON().foreachPartition(...)`으로 분산 처리한다. 각 partition의 `insert_partition`이 최대 500행 또는 1MiB로 버퍼링한 뒤 `_post_clickhouse_rows`를 호출한다. 따라서 ClickHouse 요청 단위는 Spark partition 내의 bounded chunk이며, 대량 데이터를 driver로 `collect()`하지 않는다.
+- Spark checkpoint는 기존과 같이 컨테이너 내부 `/tmp/laptop-metrics/security_events_clickhouse`를 사용한다. 재시도 또는 같은 topic을 읽는 별도 query는 중복 insert를 만들 수 있다. exactly-once는 보장하지 않으며 컨테이너 재생성으로 checkpoint가 사라지면 새 query가 `latest`부터 시작해 미처리 이벤트를 놓칠 수 있다.
+
+#### 실제 용량 관측과 추정
+
+- 측정 당시 호스트 파일시스템은 약 20 GiB 사용 가능했고 약 96% 사용 상태였다. 따라서 수십 GiB 규모의 여유가 있다고 단정할 수 없으며, 호스트 디스크를 계속 관찰해야 한다. Docker daemon의 데이터 루트는 `/var/lib/docker`이고 Kafka 로그는 `laptop-metrics-kafka-data` named volume에 저장된다. ClickHouse 데이터 디렉터리는 2 GiB 컨테이너 tmpfs이며 측정 시 약 153 MiB를 사용하고 약 1.8 GiB가 남아 있었다.
+- Kafka 과거 topic 측정에서는 296,302건의 JSON 본문이 146,820,753 bytes(평균 약 495.5 bytes/event)였고 topic 디스크 사용량은 약 178.2 MB였다. retention 적용 후 과거 세그먼트는 정리되어 topic 크기가 0으로 관측되었으며, 이후 smoke test 직후 topic log는 약 1.04 MB였다.
+- 실제 collector smoke test에서는 572건, 직렬화 크기 282,597 bytes(평균 약 494.1 bytes/event)가 생성됐다. 같은 구간 Kafka offset이 572 증가하고 ClickHouse 행도 572 증가했다.
+- ClickHouse smoke 데이터는 2,312행, `system.parts` 기준 68,162 bytes였고 평균 물리 크기는 약 29.5 bytes/row였다. 작은 표본이며 중복 sink 결과가 포함되어 장기 저장량의 보장값으로 쓰지 않는다. 이 값으로 210만 행을 단순 환산하면 약 62 MB다. 원본 이벤트 직렬화 평균 494~496 bytes를 기준으로 210만 건의 논리 JSON 크기는 약 1.04 GB다. Kafka 30만 건은 약 149 MB의 논리 JSON 크기에 해당하며, 실제 broker 디스크 크기는 세그먼트 및 Kafka 저장 오버헤드와 압축 상태에 따라 달라진다.
+- 210만 건 추정은 약 3.5 records/sec를 7일 유지한다고 가정한 수치일 뿐이다. 실제 수집량이 달라지면 저장량도 비례해 달라진다. ClickHouse merge 작업에는 추가 임시 공간이 필요하다. 현재 CH tmpfs의 약 1.8 GiB 여유는 위 단순 환산보다 크지만, 실제 파티션 크기·진단 로그·동시 merge에 필요한 공간까지 보장하지 않는다. 호스트 전체가 96% 사용 상태여서 디스크 부족 위험은 남아 있다.
+
+#### 추가 검증
+
+| 검증 항목 | 결과 |
+| --- | --- |
+| 전체 pytest | 48 passed, 1 skipped (외부 Kafka integration marker 비활성) |
+| collector 30초 기본값 및 `.env.example` 설정 일관성 | 테스트 통과 |
+| Kafka retention 및 ClickHouse 7일 TTL 설정 | 설정 검증 테스트 통과 |
+| Spark ClickHouse 배치 요청 및 30초 trigger mock 검증 | 통과; ClickHouse 요청은 레코드별이 아닌 partition chunk 단위 |
+| Ruff lint/format, mypy, `git diff --check` | 통과 |
+| 실제 collector → Kafka → Spark → ClickHouse smoke test | 572개 수집, Kafka offset +572, ClickHouse 행 +572 확인 |
+
+실제 Spark insert query log에서 요청별 행 수 `[37, 500, 35]`를 관측했다. 이는 여러 partition/chunk의 bounded insert 결과이며 단일 요청을 이벤트마다 반복하지 않는다. 별도 checkpoint로 같은 topic을 소비한 임시 Spark query 두 개가 동시에 실행된 이전 smoke 구간에서는 중복 행이 생겼다. 이 결과는 병렬 consumer/query 구성에서 중복 쓰기 가능성을 보여주며 exactly-once 보장을 뜻하지 않는다.
 
 ## 5. 남아 있는 환경 제약
 

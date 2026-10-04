@@ -26,21 +26,21 @@ class CollectorConfig:
             Validated collector configuration.
 
         Raises:
-            ValueError: If a required value is empty or invalid.
+            ValueError: If a required environment value is missing or invalid.
         """
         servers = tuple(
             server.strip()
-            for server in os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092").split(",")
+            for server in _required_env("KAFKA_BOOTSTRAP_SERVERS").split(",")
             if server.strip()
         )
         if not servers:
             raise ValueError("KAFKA_BOOTSTRAP_SERVERS must contain at least one server")
 
-        log_level = os.getenv("LOG_LEVEL", "INFO").strip().upper()
+        log_level = _required_env("LOG_LEVEL").upper()
         if log_level not in _VALID_LOG_LEVELS:
             raise ValueError(f"LOG_LEVEL must be one of {sorted(_VALID_LOG_LEVELS)}")
 
-        host_id_salt = _nonempty_env("HOST_ID_SALT", "")
+        host_id_salt = _required_env("HOST_ID_SALT")
         if host_id_salt == "replace-with-a-private-stable-local-value":
             raise ValueError("HOST_ID_SALT must be replaced with a private stable local value")
         if len(host_id_salt) < 16:
@@ -48,24 +48,24 @@ class CollectorConfig:
 
         return cls(
             kafka_bootstrap_servers=servers,
-            security_events_topic=_nonempty_env("SECURITY_EVENTS_TOPIC", "security_events"),
-            collection_interval_seconds=_positive_float("COLLECTION_INTERVAL_SECONDS", "5"),
-            kafka_client_id=_nonempty_env("KAFKA_CLIENT_ID", "security-telemetry-collector"),
+            security_events_topic=_required_env("SECURITY_EVENTS_TOPIC"),
+            collection_interval_seconds=_positive_float("COLLECTION_INTERVAL_SECONDS"),
+            kafka_client_id=_required_env("KAFKA_CLIENT_ID"),
             host_id_salt=host_id_salt,
-            docker_events_enabled=_boolean_env("DOCKER_EVENTS_ENABLED", "true"),
+            docker_events_enabled=_boolean_env("DOCKER_EVENTS_ENABLED"),
             log_level=log_level,
         )
 
 
-def _nonempty_env(name: str, default: str) -> str:
-    value = os.getenv(name, default).strip()
+def _required_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
     if not value:
-        raise ValueError(f"{name} must not be empty")
+        raise ValueError(f"{name} must be set in the environment or .env file")
     return value
 
 
-def _positive_float(name: str, default: str) -> float:
-    raw_value = os.getenv(name, default)
+def _positive_float(name: str) -> float:
+    raw_value = _required_env(name)
     try:
         value = float(raw_value)
     except ValueError as error:
@@ -75,8 +75,8 @@ def _positive_float(name: str, default: str) -> float:
     return value
 
 
-def _boolean_env(name: str, default: str) -> bool:
-    value = os.getenv(name, default).strip().lower()
+def _boolean_env(name: str) -> bool:
+    value = _required_env(name).lower()
     if value in {"1", "true", "yes", "on"}:
         return True
     if value in {"0", "false", "no", "off"}:

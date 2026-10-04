@@ -38,6 +38,14 @@ docker compose exec spark /opt/spark/bin/spark-submit --master 'local[*]' --conf
 docker compose exec clickhouse sh -c 'clickhouse-client --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" --database "$CLICKHOUSE_DB" --query "SELECT event_type, count() FROM security_events GROUP BY event_type"'
 ```
 
+Kafka broker가 실행 중일 때 실제 publish/consume integration test를 포함해 전체 테스트를 실행하려면 opt-in 환경변수를 지정합니다.
+
+```bash
+RUN_KAFKA_INTEGRATION_TESTS=1 .venv/bin/python -m pytest
+```
+
+이 변수가 없으면 외부 Kafka broker가 필요한 integration test는 skip 처리됩니다.
+
 ## 현재 이벤트와 공통 필드
 
 | 이벤트 | 내용 |

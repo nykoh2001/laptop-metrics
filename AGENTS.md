@@ -157,6 +157,22 @@ Spark, and ClickHouse settings. Never commit local credentials or raw host ident
 - Keep the report aligned with the current roadmap phase; do not use report writing as a reason to
   implement later-phase capabilities.
 
+## Pull Request Descriptions
+
+- Before creating or editing a pull request, read the applicable files under
+  `.github/PULL_REQUEST_TEMPLATE/`. For a feature pull request, follow `feature.md` headings and
+  instructions exactly.
+- Include the template's `Architecture (Diagram)`, `Summary`, and `Verification` sections. Write the
+  architecture as an English ASCII diagram based on the current source and Compose configuration;
+  do not invent topics, partitions, consumer groups, tables, volumes, or services. Mark planned
+  components explicitly.
+- Write the summary and verification in Korean noun-phrase bullets, report only facts supported by
+  the current diff or executed checks, and list no more than five verification items. Mark checks
+  that were not run as `미실행 (사유: ...)`.
+- Remove instructional HTML comments from the final pull request description.
+- If a template refers to an example file that is absent from the repository, follow the available
+  template itself and do not fabricate example content.
+
 
 ## Security Policy
 

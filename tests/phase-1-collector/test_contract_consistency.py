@@ -9,7 +9,7 @@ import spark.jobs.security_events_to_clickhouse as sink_contract
 
 def test_payload_allowlists_match_json_schema_and_sink() -> None:
     """Collector, documented schema, and sink reject the same extra fields."""
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     schema = json.loads(
         (project_root / "schemas" / "security_event.schema.json").read_text(encoding="utf-8")
     )

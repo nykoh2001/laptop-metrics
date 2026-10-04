@@ -66,7 +66,7 @@ def test_serialize_event_preserves_common_envelope_and_null() -> None:
 
 def test_model_fields_match_json_schema_required_fields() -> None:
     """The Python model and checked-in JSON contract expose one envelope."""
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     schema = json.loads(
         (project_root / "schemas" / "security_event.schema.json").read_text(encoding="utf-8")
     )
@@ -80,7 +80,7 @@ def test_model_fields_match_json_schema_required_fields() -> None:
 
 def test_checked_in_example_uses_deterministic_event_id() -> None:
     """The documented sample follows the same event identifier rule as code."""
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     sample = json.loads(
         (project_root / "schemas" / "security_event.example.json").read_text(encoding="utf-8")
     )

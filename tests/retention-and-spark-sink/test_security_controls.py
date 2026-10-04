@@ -125,7 +125,7 @@ def test_home_directory_is_normalized_without_changing_system_path() -> None:
 
 def test_compose_has_no_privilege_escalation_or_sensitive_host_mounts() -> None:
     """Container services cannot be used to expand host telemetry privileges."""
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     compose = (project_root / "docker-compose.yml").read_text(encoding="utf-8")
     execution_files = [
         *sorted((project_root / "scripts").glob("*.sh")),
@@ -159,25 +159,38 @@ def test_compose_has_no_privilege_escalation_or_sensitive_host_mounts() -> None:
 
 def test_clickhouse_schema_has_bounded_retention() -> None:
     """Security telemetry is not retained indefinitely by the phase-1 table."""
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     ddl = (project_root / "clickhouse" / "init" / "001_create_security_events.sql").read_text(
         encoding="utf-8"
     )
 
     assert "CREATE TABLE IF NOT EXISTS metrics.security_events" in ddl
     assert "TTL toDateTime(collected_at) + INTERVAL 7 DAY DELETE" in ddl
+    assert "event_time" not in ddl.split("TTL", maxsplit=1)[1].split("COMMENT", maxsplit=1)[0]
     compose = (project_root / "docker-compose.yml").read_text(encoding="utf-8")
     clickhouse_service = compose.split("  clickhouse:", maxsplit=1)[1].split(
         "  grafana:", maxsplit=1
     )[0]
     assert "/var/lib/clickhouse" in clickhouse_service
     assert "clickhouse_data:" not in compose
-    assert "KAFKA_LOG_RETENTION_HOURS: 168" in compose
+    assert "KAFKA_LOG_RETENTION_MS: 86400000" in compose
+    assert "KAFKA_LOG_ROLL_MS: 3600000" in compose
+    assert "KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000" in compose
+
+
+def test_collector_interval_and_kafka_retention_defaults() -> None:
+    """The documented local defaults match the requested retention horizon."""
+    project_root = Path(__file__).resolve().parents[2]
+    example_env = (project_root / ".env.example").read_text(encoding="utf-8")
+    compose = (project_root / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "COLLECTION_INTERVAL_SECONDS=30" in example_env
+    assert "KAFKA_LOG_RETENTION_MS: 86400000" in compose
 
 
 def test_kafka_image_transient_volumes_do_not_create_anonymous_volumes() -> None:
     """Kafka image-declared scratch paths use tmpfs; broker logs use the named volume."""
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parents[2]
     compose = (project_root / "docker-compose.yml").read_text(encoding="utf-8")
     kafka_service = compose.split("  kafka:", maxsplit=1)[1].split("  spark:", maxsplit=1)[0]
 

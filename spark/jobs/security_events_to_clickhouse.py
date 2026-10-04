@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
@@ -49,6 +50,8 @@ _PAYLOAD_FIELDS = {
 }
 _MAX_ROW_BYTES = 32_768
 _MAX_STRING_LENGTH = 4_096
+_MAX_INSERT_ROWS = 500
+_MAX_INSERT_BYTES = 1_048_576
 _HOST_ID_PATTERN = re.compile(r"^host-[0-9a-f]{24}$")
 _USER_ID_PATTERN = re.compile(r"^user-[0-9a-f]{24}$")
 
@@ -148,29 +151,60 @@ def clickhouse_insert_url(config: ClickHouseConfig) -> str:
 
 
 def insert_batch(events: DataFrame, _batch_id: int, config: ClickHouseConfig) -> None:
-    """Insert one Spark micro-batch through ClickHouse's HTTP interface.
+    """Insert one Spark micro-batch through bounded partition-level HTTP writes.
 
-    This intentionally simple driver-side sink is sufficient for the local
-    phase-1 volume and avoids introducing another production dependency.
+    Spark executes each partition on its workers. Each task buffers at most
+    500 rows or 1 MiB before issuing an insert, which bounds memory and keeps
+    the current low-volume micro-batches to approximately one request each.
 
     Args:
         events: Parsed micro-batch DataFrame.
-        _batch_id: Spark micro-batch identifier.
+        _batch_id: Spark micro-batch identifier, retained for foreachBatch API.
         config: ClickHouse connection configuration.
+    """
+    config_values = (config.url, config.database, config.user, config.password)
+    events.toJSON().foreachPartition(lambda rows: insert_partition(rows, config_values))
+
+
+def insert_partition(rows: Iterator[str], config_values: tuple[str, str, str, str]) -> None:
+    """Validate and write one Spark partition in bounded JSONEachRow chunks.
+
+    Args:
+        rows: Iterator of Spark JSON rows for one partition.
+        config_values: Serializable URL, database, user, and password tuple.
 
     Raises:
-        OSError: If ClickHouse cannot be reached or rejects the insert.
+        OSError: If ClickHouse cannot be reached or rejects an insert.
     """
-    raw_rows = list(events.toJSON().toLocalIterator())
-    rows = [validated for row in raw_rows if (validated := validate_clickhouse_json_row(row))]
-    rejected_event_count = len(raw_rows) - len(rows)
+    config = ClickHouseConfig(*config_values)
+    output_rows: list[str] = []
+    output_bytes = 0
+    rejected_event_count = 0
+    for row in rows:
+        validated = validate_clickhouse_json_row(row)
+        if validated is None:
+            rejected_event_count += 1
+            continue
+        row_bytes = len(validated.encode("utf-8")) + 1
+        if output_rows and (
+            len(output_rows) >= _MAX_INSERT_ROWS or output_bytes + row_bytes > _MAX_INSERT_BYTES
+        ):
+            _post_clickhouse_rows(output_rows, config)
+            output_rows = []
+            output_bytes = 0
+        output_rows.append(validated)
+        output_bytes += row_bytes
+    if output_rows:
+        _post_clickhouse_rows(output_rows, config)
     if rejected_event_count:
         LOGGER.warning(
             "Rejected unsafe security events before ClickHouse insert",
             extra={"rejected_event_count": rejected_event_count},
         )
-    if not rows:
-        return
+
+
+def _post_clickhouse_rows(rows: list[str], config: ClickHouseConfig) -> None:
+    """Send a bounded set of validated rows as one ClickHouse insert."""
     request = Request(
         clickhouse_insert_url(config),
         data=("\n".join(rows) + "\n").encode("utf-8"),
@@ -355,6 +389,7 @@ def write_to_clickhouse(
     return (
         events.writeStream.outputMode("append")
         .option("checkpointLocation", checkpoint_location)
+        .trigger(processingTime="30 seconds")
         .foreachBatch(lambda batch, batch_id: insert_batch(batch, batch_id, config))
         .start()
     )
